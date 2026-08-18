@@ -79,16 +79,21 @@ const VideoStage = forwardRef(function VideoStage(props, ref) {
   const onTimeRef = useRef(onTime);
   useEffect(() => { onTimeRef.current = onTime; }, [onTime]);
 
-  /* 视框尺寸（与视频同比例） */
+  /* 视框尺寸（与视频同比例，铺满播放区；竖屏/横屏均适用） */
   useEffect(() => {
     const vw = meta?.video?.width || 16, vh = meta?.video?.height || 9;
     const parent = wrapRef.current?.parentElement;
     if (!parent) return;
     const measure = () => {
-      const availW = parent.clientWidth - 2;
-      const availH = parent.clientHeight - 220; // 预留时间轴
+      const availW = parent.clientWidth;
+      const availH = parent.clientHeight;
+      if (availW <= 0 || availH <= 0) return;
+      // 等比缩放：s 为限制维度下的尺寸，另一维按视频比例换算
       const s = Math.min(availW, availH * (vw / vh));
-      setStageSize({ w: Math.max(160, Math.round(s)), h: Math.max(90, Math.round(s * vh / vw)) });
+      setStageSize({
+        w: Math.max(160, Math.round(s)),
+        h: Math.max(90, Math.round(s * vh / vw)),
+      });
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -133,7 +138,7 @@ const VideoStage = forwardRef(function VideoStage(props, ref) {
 
       <div className="player-holder" ref={stageRefEl}>
         <div className="video-mount" ref={wrapRef}
-          style={{ aspectRatio: `${meta?.video?.width || 16} / ${meta?.video?.height || 9}`, maxWidth: '100%', margin: '0 auto' }}>
+          style={{ width: stageSize.w, height: stageSize.h }}>
           <video ref={videoRef} className="video-js vjs-big-play-centered" playsInline />
           {ready && videoUrl && (
             <OverlayStage

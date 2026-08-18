@@ -38,6 +38,11 @@ export default function FilePickerModal({ open, onClose, onPick, current }) {
     onPick(sel.path, sel.name);
     onClose();
   };
+  /* 双击快捷选择：直接使用当前条目（避免 setState 异步导致的空 sel） */
+  const confirmPickItem = (item) => {
+    onPick(item.path, item.name);
+    onClose();
+  };
 
   const pickVideo = (item) => {
     setSel({ path: item.path, name: item.name, size: item.size });
@@ -82,7 +87,7 @@ export default function FilePickerModal({ open, onClose, onPick, current }) {
                 const active = sel?.path === it.path;
                 return (
                   <div key={it.path} className={`fs-item fs-video ${active ? 'active' : ''}`}
-                    onClick={() => pickVideo(it)} onDoubleClick={() => { pickVideo(it); confirmPick(); }} title={it.path}>
+                    onClick={() => pickVideo(it)} onDoubleClick={() => { pickVideo(it); confirmPickItem(it); }} title={it.path}>
                     <span className="fi-thumb"><img loading="lazy"
                       src={rel(`/api/fs/thumbnail?path=${encodeURIComponent(it.path)}&t=${Math.round(it.mtime)}`)} alt="" /></span>
                     <span className="fi-name">{it.name}</span>
