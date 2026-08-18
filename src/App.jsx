@@ -7,6 +7,7 @@ import OverlayPanel from './components/OverlayPanel.jsx';
 import SegmentsPanel from './components/SegmentsPanel.jsx';
 import JobsPanel from './components/JobsPanel.jsx';
 import FabricDrawModal from './components/FabricDrawModal.jsx';
+import FilePickerModal from './components/FilePickerModal.jsx';
 
 export default function App() {
   const [health, setHealth] = useState(null);
@@ -37,6 +38,7 @@ export default function App() {
 
   const [editing, setEditing] = useState(false);
   const [paintOpen, setPaintOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const playerRef = useRef(null);
   const stageRef = useRef(null);
@@ -229,6 +231,7 @@ export default function App() {
             onOpenPaint={() => { playerRef.current?.pause(); setPaintOpen(true); }} />
 
           <div className="quickbar">
+            <button className="btn primary" onClick={() => setPickerOpen(true)}>🎬 选择视频…（弹窗）</button>
             <span className="dim">当前: {current ? current.name : '未选择'} {duration ? `· ${fmtTime(duration)}` : ''}</span>
             <span className="spacer" />
             <button className="btn small ghost" disabled={!segments.length} onClick={() => setSegments([])}>清空片段</button>
@@ -270,6 +273,11 @@ export default function App() {
           meta={meta} duration={duration} curTime={curTime}
           onClose={() => setPaintOpen(false)} onPublish={publishPaint} />
       )}
+      <FilePickerModal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onPick={(path, name) => { selectVideo(path); }}
+        current={current} />
       <div id="toasts" className="toast-wrap" />
     </>
   );
