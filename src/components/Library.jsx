@@ -1,33 +1,102 @@
-import React from 'react';
-import { fmtSize, rel } from '../api.js';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { api, fmtSize, rel } from '../api.js';
 
-/* 视频库：不提供上传。视频由运维直接放入服务器 videos/ 目录，网页仅负责选择本地视频。 */
-export default function Library({ videos, current, onSelect, reload, outputs, setOutputs, config }) {
+/* 本地文件浏览器：在服务器白名单根目录内选择任意路径的视频 */
+export default function Library({ current, onSelect, config, reload, outputs, setOutputs, concatList, setConcatList }) {
+  const [dir, setDir] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+
+  const navigate = useCallback(async (p) => {
+    setLoading(true); setErr('');
+    try {
+      const d = await api(`/api/fs?path=${encodeURIComponent(p || '')}`);
+      setDir(d);
+    } catch (e) { setErr(e.message); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { navigate(config?.fsRoots?.[0] || '/'); }, [config, navigate]);
+
+  const inConcat = (path) => concatList.some((x) => x.path === path);
+  const toggleConcat = (item) => {
+    if (inConcat(item.path)) setConcatList((p) => p.filter((x) => x.path !== item.path));
+    else setConcatList((p) => [...p, item]);
+  };
+
   return (
     <>
       <section className="card">
         <div className="card-head">
-          <h2>📁 视频库 <span className="dim" style={{ fontWeight: 400 }}>(本地目录)</span></h2>
+          <h2>📁 本地文件 <span className="dim" style={{ fontWeight: 400 }}>(白名单内任意路径)</span></h2>
           <div className="card-tools">
-            <button className="btn ghost small" onClick={reload} title="刷新列表">⟳</button>
+            <button className="btn ghost small" title="刷新目录" onClick={() => navigate(dir?.path)}>⟳</button>
           </div>
         </div>
-        <div className="stats dim" style={{ fontSize: 12 }}>
-          {videos.length} 个本地视频 · 共 {fmtSize(videos.reduce((s, v) => s + v.size, 0))}
+        <div className="fs-pathbar mono" title={dir?.path}>📂 {dir?.path || '加载中…'}</div>
+        <div className="fs-roots">
+          {(config?.fsRoots || []).map((r) => (
+            <button key={r} className={`btn tiny ghost ${dir?.path === r ? 'primary' : ''}`}
+              onClick={() => navigate(r)} title={r}>{r}</button>
+          ))}
         </div>
-        <p className="tip">
-          📌 无需上传：将视频文件放入服务器<br />
-          <code className="mono">{config?.videosDir || 'videos/'}</code><br />
-          后点 ⟳ 刷新即可在此选择
+        {err && <p className="j-err" style={{ color: 'var(--danger)' }}>{err}</p>}
+        <div className="fs-list" onDoubleClick={() => {}}>
+          {dir?.parent && (
+            <div className="fs-item fs-dir" onClick={() => navigate(dir.parent)}>
+              <span className="fi-icon">📂</span><span className="fi-name">.. (上级目录)</span>
+            </div>
+          )}
+          {dir?.items.map((it) => {
+            if (it.type === 'dir') {
+              return (
+                <div key={it.path} className="fs-item fs-dir" onClick={() => navigate(it.path)} title={it.path}>
+                  <span className="fi-icon">📁</span>
+                  <span className="fi-name">{it.name}{it.isSymlink ? ' ⇢' : ''}</span>
+                </div>
+              );
+            }
+            if (it.type === 'video') {
+              const active = current?.path === it.path;
+              const inList = inConcat(it.path);
+              return (
+                <div key={it.path} className={`fs-item fs-video ${active ? 'active' : ''}`} onClick={() => onSelect(it.path)} title={it.path}>
+                  <span className="fi-thumb"><img loading="lazy"
+                    src={rel(`/api/fs/thumbnail?path=${encodeURIComponent(it.path)}&t=${Math.round(it.mtime)}`)} alt="" /></span>
+                  <span className="fi-name">{it.name}</span>
+                  <span className="fi-size">{fmtSize(it.size)}</span>
+                  <button className={`btn tiny ${inList ? 'primary' : 'ghost'}`} title={inList ? '已加入拼接清单，再点移除' : '加入拼接清单'}
+                    onClick={(e) => { e.stopPropagation(); toggleConcat(it); }}>{inList ? '✓' : '+'}</button>
+                </div>
+              );
+            }
+            return (
+              <div key={it.path} className="fs-item fs-file" title={it.path}>
+                <span className="fi-icon">📄</span><span className="fi-name">{it.name}</span>
+                <span className="fi-size">{fmtSize(it.size)}</span>
+              </div>
+            );
+          })}
+          {loading && <div className="empty-note">加载中…</div>}
+        </div>
+        <p className="tip" style={{ fontSize: 11.5 }}>
+          点击视频即选择·点击 ＋ 加入拼接清单 · 白名单根目录由服务器 FS_ROOTS 控制
         </p>
-        <div className="file-grid">
-          {videos.length === 0 && <div className="empty-note">目录为空<br />请先放置视频到 videos/ 目录</div>}
-          {videos.map((v) => (
-            <div key={v.name} className={`file-tile ${current?.name === v.name ? 'active' : ''}`}
-              onClick={() => onSelect(v.name)}>
-              <img loading="lazy" src={rel(`/api/videos/${encodeURIComponent(v.name)}/thumbnail?t=${Math.round(v.mtime)}`)} alt={v.name} />
-              <div className="ft-name">{v.name}</div>
-              <div className="ft-size">{fmtSize(v.size)}</div>
+      </section>
+
+      {/* 拼接清单 */}
+      <section className="card">
+        <div className="card-head">
+          <h2>🧩 拼接清单 <span className="badge">{concatList.length}</span></h2>
+          <button className="btn ghost small" disabled={!concatList.length} onClick={() => setConcatList([])}>清空</button>
+        </div>
+        <div className="concat-list">
+          {!concatList.length && <p className="dim center" style={{ fontSize: 12 }}>在上方文件列表点 ＋ 添加，导出面板选「片段拼接」为多文件拼接</p>}
+          {concatList.map((it, i) => (
+            <div key={it.path} className="concat-item">
+              <span className="ci-idx">{i + 1}</span>
+              <span className="ci-name" title={it.path}>{it.name}</span>
+              <button className="seg-del" onClick={() => setConcatList((p) => p.filter((x) => x.path !== it.path))}>✕</button>
             </div>
           ))}
         </div>
@@ -48,10 +117,9 @@ export default function Library({ videos, current, onSelect, reload, outputs, se
               <button className="del" title="删除"
                 onClick={async () => {
                   try {
-                    const r = await fetch(rel(`/api/output/${encodeURIComponent(o.name)}`), { method: 'DELETE' });
-                    if (!r.ok) throw new Error('删除失败');
-                    setOutputs((p) => p.filter((x) => x.name !== o.name));
-                  } catch (e) { /* toast 不在此组件内，忽略 */ }
+                    await fetch(rel(`/api/output/${encodeURIComponent(o.name)}`), { method: 'DELETE' });
+                    reload();
+                  } catch {}
                 }}>🗑</button>
             </div>
           ))}

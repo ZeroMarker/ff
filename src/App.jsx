@@ -10,15 +10,16 @@ import FabricDrawModal from './components/FabricDrawModal.jsx';
 
 export default function App() {
   const [health, setHealth] = useState(null);
+  const [config, setConfig] = useState(null);
   const [videos, setVideos] = useState([]);
   const [outputs, setOutputs] = useState([]);
   const [assets, setAssets] = useState([]);
   const [jobs, setJobs] = useState([]);
-  const [uploads, setUploads] = useState([]);
 
-  const [current, setCurrent] = useState(null);   // {name, size, mtime}
+  const [current, setCurrent] = useState(null);   // {path, name}
   const [meta, setMeta] = useState(null);
   const [videoUrl, setVideoUrl] = useState('');
+  const [concatList, setConcatList] = useState([]);
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
   const [curTime, setCurTime] = useState(0);
@@ -67,20 +68,20 @@ export default function App() {
     return () => clearInterval(iv);
   }, [reload]);
 
-  /* ---------- 视频选择 ---------- */
-  const selectVideo = useCallback(async (name) => {
-    setCurrent({ name });
+  /* ---------- 视频选择（任意白名单路径） ---------- */
+  const selectVideo = useCallback(async (path) => {
+    const name = path.split(/[\\/]/).pop();
+    setCurrent({ path, name });
     setSegments([]);
     setOverlays([]);
     setSelectedId(null);
     setEditing(false);
     setTrimStart(0);
     try {
-      const info = await api(`/api/videos/${encodeURIComponent(name)}/info`);
+      const info = await api(`/api/fs/info?path=${encodeURIComponent(path)}`);
       setMeta(info);
-      const mtime = Date.now();
-      setVideoUrl(rel(`/api/videos/${encodeURIComponent(name)}` + `?t=${mtime}`));
-      toast(`已选择本地视频: ${name}`, 'ok');
+      setVideoUrl(rel(`/api/fs/video?path=${encodeURIComponent(path)}&t=${Date.now()}`));
+      toast(`已选择: ${path}`, 'ok');
     } catch (e) {
       toast('读取元数据失败: ' + e.message, 'err');
     }
@@ -154,15 +155,20 @@ export default function App() {
     };
     try {
       let type = mode;
+      const body = { type, params };
+      if (mode === 'clip' || mode === 'segs' || mode === 'full' || mode === 'audio' || mode === 'thumb') {
+        body.src = current.path;
+      }
       if (mode === 'clip') { params.start = trimStart; params.end = trimEnd; }
       else if (mode === 'segs') { type = 'segments'; params.segments = segments.map((s) => ({ ...s })); }
       else if (mode === 'audio') { type = 'audio'; params.format = audioFormat; params.start = 0; }
       else if (mode === 'thumb') { type = 'thumb'; params.at = trimStart; }
-      else { type = 'full'; params.start = 0; params.end = 0; }
+      else if (mode === 'full') { type = 'full'; params.start = 0; params.end = 0; }
+      if (mode === 'concat') { body.type = 'concat'; params.paths = concatList.map((x) => x.path); }
       await api('/api/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, video: current.name, params }),
+        body: JSON.stringify(body),
       });
       toast('任务已创建，排队执行中', 'ok');
       setTimeout(() => api('/api/jobs').then(setJobs).catch(() => {}), 500);
@@ -204,9 +210,9 @@ export default function App() {
 
       <main className="layout">
         <aside className="col col-left">
-          <Library videos={videos} uploads={uploads} setUploads={setUploads}
-            current={current} onSelect={selectVideo} reload={reload}
-            outputs={outputs} setOutputs={setOutputs} />
+          <Library current={current} onSelect={selectVideo} reload={reload} config={config}
+            outputs={outputs} setOutputs={setOutputs}
+            concatList={concatList} setConcatList={setConcatList} />
         </aside>
 
         <section className="col col-mid">
@@ -239,7 +245,8 @@ export default function App() {
             overlays={overlays} trimStart={trimStart} trimEnd={trimEnd}
             segments={segments} segTotal={segTotal} duration={duration}
             curTime={curTime} onSeek={(t) => playerRef.current?.seek(t)}
-            onExport={startExport} disabled={!current} />
+            onExport={startExport} disabled={!current}
+            concatList={concatList} />
 
           <OverlayPanel
             overlays={overlays} selectedId={selectedId} setSelectedId={setSelectedId}

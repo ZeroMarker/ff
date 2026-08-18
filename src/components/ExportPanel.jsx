@@ -2,7 +2,7 @@ import React from 'react';
 import { fmtTime, fmtSize } from '../api.js';
 
 const MODES = [
-  ['clip', '区间'], ['segs', '片段拼接'], ['full', '整片'], ['audio', '音频'], ['thumb', '封面'],
+  ['clip', '区间'], ['segs', '片段拼接'], ['full', '整片'], ['audio', '音频'], ['thumb', '封面'], ['concat', '拼接清单'],
 ];
 const FILTER_OPTS = [
   ['grayscale', '灰度'], ['negative', '反色'], ['mirror', '镜像'], ['blur', '模糊'], ['vignette', '暗角'], ['sharpen', '锐化'],
@@ -12,7 +12,7 @@ const RES_OPTS = [['0', '原画'], ['2160', '4K'], ['1440', '2K'], ['1080', '108
 export default function ExportPanel({
   mode, setMode, format, setFormat, audioFormat, setAudioFormat,
   res, setRes, speed, setSpeed, filters, setFilters,
-  overlays, trimStart, trimEnd, segments, segTotal, duration, curTime, onSeek, onExport, disabled,
+  overlays, trimStart, trimEnd, segments, segTotal, duration, curTime, onSeek, onExport, disabled, concatList,
 }) {
   const toggleFilter = (f) => setFilters((p) => (p.includes(f) ? p.filter((x) => x !== f) : [...p, f]));
   const segSecs = segments.reduce((s, x) => s + (x.end - x.start), 0);
@@ -23,11 +23,13 @@ export default function ExportPanel({
     if (mode === 'full') return `整片（${fmtTime(duration)}）${overlays.length ? ` + ${overlays.length} 个叠加层` : ''}`;
     if (mode === 'audio') return `提取 ${audioFormat.toUpperCase()} 音频`;
     if (mode === 'thumb') return `生成封面帧 @ ${fmtTime(trimStart)}`;
+    if (mode === 'concat') return concatList.length ? `拼接 ${concatList.length} 个本地视频（共 ${fmtSize(concatList.reduce((s, x) => s + (x.size || 0), 0))}，请确保分辨率一致）` : '请先在左侧文件列表添加 ≥2 个视频到拼接清单';
     return '';
   };
 
   const canExport = disabled
     || (mode === 'segs' && !segments.length)
+    || (mode === 'concat' && concatList.length < 2)
     || (mode === 'clip' && trimEnd - trimStart < 0.05);
 
   return (

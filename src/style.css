@@ -206,3 +206,24 @@ input[type=range] { accent-color: var(--accent); }
 .spacer { flex: 1; }
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-thumb { background: #2a3441; border-radius: 4px; }
+
+/* ---------- 文件浏览器 ---------- */
+.fs-pathbar { font-size: 11px; color: var(--accent); background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fs-roots { display: flex; flex-wrap: wrap; gap: 4px; }
+.fs-roots .btn { padding: 1px 8px; font-size: 10.5px; }
+.fs-list { overflow-y: auto; max-height: calc(100vh - 460px); min-height: 120px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg3); }
+.fs-item { display: flex; align-items: center; gap: 8px; padding: 7px 9px; cursor: pointer; border-bottom: 1px solid #1e2732; font-size: 12px; min-height: 34px; }
+.fs-item:hover { background: rgba(45,212,191,.07); }
+.fs-item.active { background: rgba(45,212,191,.12); box-shadow: inset 3px 0 0 var(--accent); }
+.fs-dir { color: #7fd7c9; }
+.fs-file { color: var(--dim); cursor: default; }
+.fs-video { cursor: pointer; }
+.fi-icon { width: 20px; text-align: center; flex: none; }
+.fi-thumb { width: 48px; height: 27px; border-radius: 4px; overflow: hidden; background: #000; flex: none; display: flex; align-items: center; justify-content: center; }
+.fi-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.fi-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fi-size { color: var(--dim); font-family: var(--mono); font-size: 10.5px; flex: none; }
+.concat-list { display: flex; flex-direction: column; gap: 5px; max-height: 150px; overflow-y: auto; }
+.concat-item { display: flex; align-items: center; gap: 8px; padding: 5px 8px; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
+.ci-idx { width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #03211d; font-weight: 700; font-size: 11px; display: flex; align-items: center; justify-content: center; flex: none; }
+.ci-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

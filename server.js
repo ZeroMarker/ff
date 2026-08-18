@@ -45,6 +45,65 @@ const MAX_UPLOAD = parseInt(process.env.MAX_UPLOAD_MB, 10) || 8192; // MB
 const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
 const UPLOAD_ENABLED = process.env.UPLOAD_ENABLED === '1' || process.env.UPLOAD_ENABLED === 'true'; // 视频不走上传，默认关闭
 
+/* ------------------------------------------------------------------ */
+/* 本地文件浏览：允许在配置的根目录白名单内选择任意路径的视频             */
+/* ------------------------------------------------------------------ */
+const os = require('os');
+const FS_ROOTS = (() => {
+  const list = (process.env.FS_ROOTS || '')
+    .split(/[::]/).map((s) => s.trim()).filter(Boolean)
+    .map((p) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } });
+  if (!list.length) list.push(
+    VIDEOS_DIR, OUTPUT_DIR, os.homedir(),
+    '/media', '/mnt', '/tmp', '/srv',
+  );
+  return [...new Set(list.map((p) => p.replace(/\/+$/, '')))];
+})();
+/* 禁止访问的系统敏感路径前缀 */
+const FS_DENY_PREFIX = ['/proc', '/sys', '/dev', '/run', '/etc', '/boot', '/var/lib', '/root', '/snap', '/var/cache', '/var/log' ];
+/* 禁止访问的目录名（任意层级） */
+const FS_DENY_NAMES = ['.ssh', '.gnupg', '.aws', '.config', 'node_modules', '.git', '.cache', 'keystore', 'secrets'];
+
+function fsResolve(p) {
+  if (typeof p !== 'string' || !p.trim()) throw new Error('缺少路径参数');
+  const abs = path.normalize(path.isAbsolute(p) ? p : path.join(process.cwd(), p));
+  if (abs.includes('\0')) throw new Error('非法路径');
+  let real;
+  try { real = fs.realpathSync(abs); } catch { throw new Error('路径不存在: ' + abs); }
+  const base = real.endsWith(path.sep) ? real : real + path.sep;
+  const inRoot = FS_ROOTS.some((r) => { const rb = r.endsWith(path.sep) ? r : r + path.sep; return real === r || base.startsWith(rb); });
+  if (!inRoot) throw new Error('路径不在允许的根目录内: ' + abs);
+  if (FS_DENY_PREFIX.some((d) => real === d || real.startsWith(d + path.sep))) throw new Error('该路径被禁止访问');
+  if (FS_DENY_NAMES.some((n) => real.split(path.sep).includes(n))) throw new Error('该目录受保护: ' + real.split(path.sep).find((x) => FS_DENY_NAMES.includes(x)));
+  return real;
+}
+
+function listFsDir(p) {
+  const real = fsResolve(p);
+  const st = fs.statSync(real);
+  if (!st.isDirectory()) throw new Error('不是目录: ' + real);
+  const raw = fs.readdirSync(real, { withFileTypes: true });
+  const items = [];
+  for (const ent of raw) {
+    if (FS_DENY_NAMES.includes(ent.name)) continue;
+    const fp = path.join(real, ent.name);
+    let isDir = ent.isDirectory();
+    let isSymlink = ent.isSymbolicLink();
+    let size = 0, mtime = 0;
+    try {
+      if (isSymlink) { const s = fs.statSync(fp); isDir = s.isDirectory(); size = s.size; mtime = s.mtimeMs; }
+      else { const s = ent.isDirectory() ? fs.lstatSync(fp) : fs.statSync(fp); size = s.size; mtime = s.mtimeMs; }
+    } catch { continue; } // 损坏链接或权限不足跳过
+    let type = isDir ? 'dir' : VIDEO_EXT.test(ent.name) ? 'video' : 'file';
+    items.push({ name: ent.name, path: fp, type, isSymlink, size, mtime });
+  }
+  items.sort((a, b) => (a.type !== 'dir') - (b.type !== 'dir') || a.name.localeCompare(b.name, 'zh-CN'));
+  let parent = null;
+  try { parent = fsResolve(path.dirname(real)); } catch { /* 已到最顶层 */ }
+  if (parent && parent === real) parent = null;
+  return { path: real, parent, items, roots: FS_ROOTS.slice() };
+}
+
 for (const dir of [VIDEOS_DIR, OUTPUT_DIR, ASSETS_DIR, THUMBS_DIR, path.dirname(JOBS_FILE)]) {
   fs.mkdirSync(dir, { recursive: true });
 }
@@ -109,7 +168,8 @@ function jobUrl(job) { return `/api/output/${encodeURIComponent(job.outputFile)}
 
 function buildJob(job) {
   const { type, params } = job;
-  const input = localVideoPath(job.video);
+  let input = '';
+  if (type !== 'concat') input = job.src ? fsResolve(job.src) : localVideoPath(job.video);
 
   // 本地图片素材白名单解析 + 字段整理
   if (Array.isArray(params.overlays)) {
@@ -164,7 +224,7 @@ function buildJob(job) {
       built = ff.buildSegmentsArgs(input, output, params);
       break;
     case 'concat': {
-      const inputs = params.videos.map((v) => localVideoPath(v));
+      const inputs = (params.paths || []).map((p) => fsResolve(p));
       built = ff.buildConcatArgs(inputs, output, params);
       break;
     }
@@ -191,7 +251,7 @@ function clamp01(v) {
   return Math.max(0, Math.min(1, n));
 }
 
-function runJob(job) {
+async function startJob(job) {
   job.status = 'running';
   job.startedAt = Date.now();
   saveJobs();
@@ -333,6 +393,7 @@ app.get('/api/config', (req, res) => {
     uploadEnabled: UPLOAD_ENABLED,
     videosDir: VIDEOS_DIR,
     outputDir: OUTPUT_DIR,
+    fsRoots: FS_ROOTS,
   });
 });
 
@@ -400,6 +461,44 @@ app.delete('/api/videos/:name', (req, res) => {
   res.json({ ok: true });
 });
 
+/* ---------- 本地文件浏览（任意路径，白名单内） ---------- */
+app.get('/api/fs', (req, res) => {
+  try { res.json(listFsDir(req.query.path || FS_ROOTS[0])); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.get('/api/fs/roots', (req, res) => {
+  res.json(FS_ROOTS);
+});
+
+app.get('/api/fs/video', (req, res) => {
+  try {
+    const fp = fsResolve(req.query.path);
+    if (!fs.statSync(fp).isFile()) return res.status(400).json({ error: '不是文件' });
+    res.sendFile(fp);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.get('/api/fs/info', (req, res) => {
+  try { res.json(ff.probe(fsResolve(req.query.path))); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/fs/thumbnail', (req, res) => {
+  try {
+    const fp = fsResolve(req.query.path);
+    const st = fs.statSync(fp);
+    const cache = path.join(THUMBS_DIR, ff.md5(fp + ':' + st.size + ':' + st.mtimeMs) + '.jpg');
+    if (!fs.existsSync(cache)) {
+      fs.mkdirSync(THUMBS_DIR, { recursive: true });
+      const meta = ff.probe(fp);
+      const at = Math.min(1, Math.max(0, (meta.format.duration || 2) * 0.3));
+      ff.runFFmpegSync(ff.buildThumbArgs(fp, cache, { at }).args, 240000);
+    }
+    res.sendFile(cache);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 /* ---------- 素材库（叠加图片，仅本地文件） ---------- */
 function listAssets() {
   return fs.readdirSync(ASSETS_DIR)
@@ -426,18 +525,20 @@ app.delete('/api/assets/:name', (req, res) => {
 
 /* ---------- 任务 ---------- */
 app.post('/api/jobs', (req, res) => {
-  const { type, video, params = {} } = req.body || {};
+  const { type, video, src, params = {} } = req.body || {};
   const valid = ['clip', 'segments', 'concat', 'audio', 'thumb', 'frame', 'full'];
   if (!valid.includes(type)) return res.status(400).json({ error: '未知任务类型: ' + type });
 
-  /* 本地文件白名单校验：仅允许本地文件库中的文件 */
+  /* 本地文件白名单校验：仅允许选择本地磁盘上的文件（任意白名单路径） */
   try {
     if (type === 'concat') {
-      if (!Array.isArray(params.videos) || params.videos.length < 2) return res.status(400).json({ error: '拼接至少需要 2 个本地视频' });
-      for (const v of params.videos) localVideoPath(v);
+      if (!Array.isArray(params.paths) || params.paths.length < 2) return res.status(400).json({ error: '拼接至少需要 2 个本地视频路径' });
+      for (const p of params.paths) fsResolve(p);
     } else {
-      if (!video) return res.status(400).json({ error: '缺少 video 参数' });
-      localVideoPath(video);
+      const p = src || (video ? path.join(VIDEOS_DIR, video) : null);
+      if (!p) return res.status(400).json({ error: '缺少 src 源文件路径' });
+      const real = fsResolve(p);
+      if (!VIDEO_EXT.test(real)) return res.status(400).json({ error: '不是视频文件(允许: mp4/webm/mov/mkv/avi/flv/m4v/ts/mpeg/wmv)' });
     }
     if (Array.isArray(params.overlays)) {
       if (params.overlays.length > 40) return res.status(400).json({ error: '叠加层最多 40 个' });
@@ -447,8 +548,8 @@ app.post('/api/jobs', (req, res) => {
     return res.status(400).json({ error: e.message });
   }
 
-  const job = makeJob({ type, video: video || '', params, name: `${type} ⟵ ${video || params.videos.join(' + ')}` });
-  runJob(job).catch((e) => console.error('[job] ' + job.id, e.message));
+  const job = makeJob({ type, video: video || '', src: src || '', params, name: `${type} ⟵ ${src || video || (params.paths || []).join(' + ')}` });
+  startJob(job).catch((e) => console.error('[job] ' + job.id, e.message));
   res.json({ id: job.id, status: job.status });
 });
 
