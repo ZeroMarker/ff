@@ -164,12 +164,70 @@ function makeJob(meta) {
   return job;
 }
 
-function jobUrl(job) { return `/api/output/${encodeURIComponent(job.outputFile)}`; }
+function outputFileUrl(filePath) {
+  return `/api/output-file?path=${encodeURIComponent(filePath)}`;
+}
+
+function jobOutputPath(job) {
+  if (job.outputPath) return job.outputPath;
+  return job.outputFile ? path.join(OUTPUT_DIR, job.outputFile) : null;
+}
+
+function jobUrl(job) {
+  const filePath = jobOutputPath(job);
+  return filePath ? outputFileUrl(filePath) : null;
+}
+
+/* 文件名中的时间参数使用 MMSS；超过 1 小时自动使用 HHMMSS。
+   例如 01:00 → 02:00 会生成 cut_01000200。 */
+function compactTime(value) {
+  const total = Math.max(0, Math.round(Number(value) || 0));
+  const seconds = total % 60;
+  const minutes = Math.floor(total / 60) % 60;
+  const hours = Math.floor(total / 3600);
+  if (hours > 0) return `${String(hours).padStart(2, '0')}${String(minutes).padStart(2, '0')}${String(seconds).padStart(2, '0')}`;
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}${String(seconds).padStart(2, '0')}`;
+}
+
+function outputTag(type, params) {
+  if (type === 'clip') return `cut_${compactTime(params.start)}${compactTime(params.end)}`;
+  if (type === 'segments') {
+    const ranges = (params.segments || []).map((s) => `${compactTime(s.start)}${compactTime(s.end)}`).join('-');
+    return `segments_${ranges || 'empty'}`;
+  }
+  if (type === 'concat') return `concat_${Math.max(0, (params.paths || []).length)}`;
+  if (type === 'audio') return `audio_${params.format || 'mp3'}`;
+  if (type === 'thumb') return `thumb_${compactTime(params.at)}`;
+  if (type === 'frame') return `frame_${compactTime(params.at)}`;
+  if (type === 'full') return 'full';
+  return type;
+}
+
+function allocateOutput(input, type, params, ext) {
+  const sourceExt = path.extname(input);
+  const sourceBase = path.basename(input, sourceExt) || 'media';
+  const tag = outputTag(type, params);
+  const stem = `${sourceBase}_${tag}`.replace(/[\u0000-\u001f<>:"/\\|?*]/g, '_').slice(0, 220);
+  const outputDir = path.dirname(input);
+  const used = new Set([...jobs.values()].map((j) => j.outputPath).filter(Boolean));
+  let suffix = 1;
+  let outputName = `${stem}.${ext}`;
+  let output = path.join(outputDir, outputName);
+  while (fs.existsSync(output) || used.has(output)) {
+    suffix++;
+    outputName = `${stem}_${suffix}.${ext}`;
+    output = path.join(outputDir, outputName);
+  }
+  return { output, outputName };
+}
 
 function buildJob(job) {
   const { type, params } = job;
   let input = '';
+  let concatInputs = [];
   if (type !== 'concat') input = job.src ? fsResolve(job.src) : localVideoPath(job.video);
+  else concatInputs = (params.paths || []).map((p) => fsResolve(p));
+  if (type === 'concat') input = concatInputs[0] || '';
 
   // 本地图片素材白名单解析 + 字段整理
   if (Array.isArray(params.overlays)) {
@@ -204,15 +262,18 @@ function buildJob(job) {
   }
 
   const extFor = (t) => {
-    if (type === 'audio') return params.format || 'mp3';
-    if (params.format === 'gif') return 'gif';
+    if (type === 'audio') {
+      const ext = String(params.format || 'mp3').toLowerCase();
+      return ['mp3', 'm4a', 'aac', 'ogg', 'flac', 'wav'].includes(ext) ? ext : 'mp3';
+    }
     if (type === 'thumb') return 'png';
-    if (type === 'frame') return params.ext || 'jpg';
-    return params.format || 'mp4';
+    if (type === 'frame') return ['jpg', 'jpeg', 'png'].includes(String(params.ext || 'jpg').toLowerCase()) ? String(params.ext).toLowerCase() : 'jpg';
+    const ext = String(params.format || 'mp4').toLowerCase();
+    return ['mp4', 'webm', 'mov', 'mkv', 'gif'].includes(ext) ? ext : 'mp4';
   };
-  const outFile = `${slug(job.video)}-${type}-${Date.now()}.${extFor(type)}`;
-  const output = path.join(OUTPUT_DIR, outFile);
-  job.outputFile = outFile;
+  const { output, outputName } = allocateOutput(input, type, params, extFor(type));
+  job.outputFile = outputName;
+  job.outputPath = output;
 
   let built;
   switch (type) {
@@ -224,8 +285,7 @@ function buildJob(job) {
       built = ff.buildSegmentsArgs(input, output, params);
       break;
     case 'concat': {
-      const inputs = (params.paths || []).map((p) => fsResolve(p));
-      built = ff.buildConcatArgs(inputs, output, params);
+      built = ff.buildConcatArgs(concatInputs, output, params);
       break;
     }
     case 'audio':
@@ -302,10 +362,6 @@ async function startJob(job) {
   }));
 }
 
-function slug(name) {
-  return String(name).replace(/\.[^.]+$/, '').replace(/[^\w\u4e00-\u9fa5-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'media';
-}
-
 /* ------------------------------------------------------------------ */
 /* 视频库                                                               */
 /* ------------------------------------------------------------------ */
@@ -323,10 +379,23 @@ function listVideos() {
 }
 
 function listOutputs() {
-  return fs.readdirSync(OUTPUT_DIR)
-    .filter((f) => !f.startsWith('thumbs') && fs.statSync(path.join(OUTPUT_DIR, f)).isFile())
-    .map((f) => { const st = fs.statSync(path.join(OUTPUT_DIR, f)); return { name: f, size: st.size, mtime: st.mtimeMs }; })
-    .sort((a, b) => b.mtime - a.mtime);
+  const files = new Map();
+  for (const f of fs.readdirSync(OUTPUT_DIR)) {
+    if (f.startsWith('thumbs')) continue;
+    const filePath = path.join(OUTPUT_DIR, f);
+    try {
+      const st = fs.statSync(filePath);
+      if (st.isFile()) files.set(filePath, { name: f, size: st.size, mtime: st.mtimeMs, url: outputFileUrl(filePath), deleteUrl: outputFileUrl(filePath) });
+    } catch { /* 输出文件可能在扫描时被删除 */ }
+  }
+  for (const j of jobs.values()) {
+    if (j.status !== 'done' || !j.outputPath) continue;
+    try {
+      const st = fs.statSync(j.outputPath);
+      if (st.isFile()) files.set(j.outputPath, { name: path.basename(j.outputPath), size: st.size, mtime: st.mtimeMs, url: outputFileUrl(j.outputPath), deleteUrl: outputFileUrl(j.outputPath) });
+    } catch { /* 忽略已不存在的历史输出 */ }
+  }
+  return [...files.values()].sort((a, b) => b.mtime - a.mtime);
 }
 
 /* ------------------------------------------------------------------ */
@@ -579,7 +648,8 @@ app.post('/api/jobs/:id/cancel', (req, res) => {
 app.delete('/api/jobs/:id', (req, res) => {
   const j = jobs.get(req.params.id);
   if (!j) return res.status(404).json({ error: '任务不存在' });
-  if (j.outputFile) { try { fs.unlinkSync(path.join(OUTPUT_DIR, j.outputFile)); } catch {} }
+  const filePath = jobOutputPath(j);
+  if (filePath) { try { fs.unlinkSync(filePath); } catch {} }
   jobs.delete(req.params.id);
   saveJobs();
   res.json({ ok: true });
@@ -597,6 +667,23 @@ function publicJob(j) {
 /* ---------- 输出文件 ---------- */
 app.get('/api/outputs', (req, res) => {
   res.json(listOutputs());
+});
+
+app.get('/api/output-file', (req, res) => {
+  try {
+    const filePath = fsResolve(req.query.path);
+    if (!fs.statSync(filePath).isFile()) return res.status(404).json({ error: 'file not found' });
+    res.download(filePath, path.basename(filePath));
+  } catch (e) { res.status(404).json({ error: e.message }); }
+});
+
+app.delete('/api/output-file', (req, res) => {
+  try {
+    const filePath = fsResolve(req.query.path);
+    if (!fs.statSync(filePath).isFile()) return res.status(404).json({ error: 'file not found' });
+    fs.unlinkSync(filePath);
+    res.json({ ok: true });
+  } catch (e) { res.status(404).json({ error: e.message }); }
 });
 
 app.get('/api/output/:file', (req, res) => {

@@ -166,7 +166,7 @@ export default function App() {
         body.src = current.path;
       }
       if (mode === 'clip') { params.start = trimStart; params.end = trimEnd; }
-      else if (mode === 'segs') { type = 'segments'; params.segments = segments.map((s) => ({ ...s })); }
+      else if (mode === 'segs') { type = 'segments'; body.type = type; params.segments = segments.map((s) => ({ ...s })); }
       else if (mode === 'audio') { type = 'audio'; params.format = audioFormat; params.start = 0; }
       else if (mode === 'thumb') { type = 'thumb'; params.at = trimStart; }
       else if (mode === 'full') { type = 'full'; params.start = 0; params.end = 0; }

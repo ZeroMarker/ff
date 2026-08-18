@@ -110,14 +110,14 @@ export default function Library({ current, onSelect, config, reload, outputs, se
         <div className="out-list">
           {outputs.length === 0 && <p className="dim center">暂无输出</p>}
           {outputs.map((o) => (
-            <div key={o.name} className="out-item">
+            <div key={o.url || o.name} className="out-item">
               <span className="nm" title={o.name}>{o.name}</span>
               <span className="sz">{fmtSize(o.size)}</span>
-              <a className="a" href={rel(`/api/output/${encodeURIComponent(o.name)}`)} download title="下载">⬇</a>
+              <a className="a" href={rel(o.url || `/api/output/${encodeURIComponent(o.name)}`)} download title="下载">⬇</a>
               <button className="del" title="删除"
                 onClick={async () => {
                   try {
-                    await fetch(rel(`/api/output/${encodeURIComponent(o.name)}`), { method: 'DELETE' });
+                    await fetch(rel(o.deleteUrl || `/api/output/${encodeURIComponent(o.name)}`), { method: 'DELETE' });
                     reload();
                   } catch {}
                 }}>🗑</button>

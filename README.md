@@ -22,7 +22,7 @@
                                                                       │
                                     lib/ffmpeg.js（参数数组化/进度/取消/白名单）
                                                                       │
-                    videos/ 本地视频库   assets/ 叠加图片素材   output/ 成品
+                    原视频同目录保存导出成品   assets/ 叠加图片素材   output/ 旧版成品
 ```
 
 ## 功能
@@ -103,7 +103,8 @@ sudo systemctl restart ff-web-editor
 
 ## 输出目录产物
 
-`output/` 内为成品（可下载/删除），`thumbs/` 为缩略图缓存，`jobs/state.json` 为任务状态。
+导出成品默认保存在原视频所在目录，文件名为「原文件名_处理方式+参数」；例如原视频 `demo.mp4` 从 01:00 截取到 02:00 后生成
+`demo_cut_01000200.mp4`。`output/` 仅保留历史版本成品，`thumbs/` 为缩略图缓存，`jobs/state.json` 为任务状态。
 
 ## License
 
