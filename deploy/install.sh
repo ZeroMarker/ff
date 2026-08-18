@@ -3,11 +3,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-echo "==> 安装 npm 依赖"
-npm install --omit=dev
+echo "==> 安装 npm 依赖（含构建需要的 devDeps）"
+npm install
+
+echo "==> 构建前端 (React + Video.js + Konva + Fabric) -> public/"
+npm run build
 
 echo "==> 创建数据目录"
-mkdir -p videos output jobs
+mkdir -p videos output jobs assets
 
 echo "==> 安装 systemd 服务"
 sudo cp deploy/ff-web-editor.service /etc/systemd/system/ff-web-editor.service

@@ -1,0 +1,268 @@
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { api, uploadFile, toast, uid, fmtTime, fmtSize } from './api.js';
+import VideoStage from './components/VideoStage.jsx';
+import Library from './components/Library.jsx';
+import ExportPanel from './components/ExportPanel.jsx';
+import OverlayPanel from './components/OverlayPanel.jsx';
+import SegmentsPanel from './components/SegmentsPanel.jsx';
+import JobsPanel from './components/JobsPanel.jsx';
+import FabricDrawModal from './components/FabricDrawModal.jsx';
+
+export default function App() {
+  const [health, setHealth] = useState(null);
+  const [videos, setVideos] = useState([]);
+  const [outputs, setOutputs] = useState([]);
+  const [assets, setAssets] = useState([]);
+  const [jobs, setJobs] = useState([]);
+  const [uploads, setUploads] = useState([]);
+
+  const [current, setCurrent] = useState(null);   // {name, size, mtime}
+  const [meta, setMeta] = useState(null);
+  const [videoUrl, setVideoUrl] = useState('');
+  const [trimStart, setTrimStart] = useState(0);
+  const [trimEnd, setTrimEnd] = useState(0);
+  const [curTime, setCurTime] = useState(0);
+
+  const [overlays, setOverlays] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [segments, setSegments] = useState([]);
+
+  const [mode, setMode] = useState('clip');
+  const [format, setFormat] = useState('mp4');
+  const [audioFormat, setAudioFormat] = useState('mp3');
+  const [res, setRes] = useState(0);
+  const [speed, setSpeed] = useState(1);
+  const [filters, setFilters] = useState([]);
+
+  const [editing, setEditing] = useState(false);
+  const [paintOpen, setPaintOpen] = useState(false);
+
+  const playerRef = useRef(null);
+  const stageRef = useRef(null);
+
+  const reload = useCallback(async () => {
+    const [v, o, a, j] = await Promise.all([
+      api('/api/videos').catch(() => []),
+      api('/api/outputs').catch(() => []),
+      api('/api/assets').catch(() => []),
+      api('/api/jobs').catch(() => []),
+    ]);
+    setVideos(v); setOutputs(o); setAssets(a); setJobs(j);
+  }, []);
+
+  useEffect(() => {
+    api('/api/config').catch(() => null).then((cfg) => {
+      if (cfg && cfg.needAuth && !localStorage.getItem('ff_token')) {
+        const t = window.prompt('请输入访问口令 (AUTH_TOKEN):');
+        if (t) localStorage.setItem('ff_token', t);
+      }
+    });
+    api('/api/health').then(setHealth).catch(() => setHealth({ ok: false, ffmpeg: '离线' }));
+    reload();
+    const iv = setInterval(() => {
+      api('/api/jobs').then(setJobs).catch(() => {});
+      api('/api/outputs').then(setOutputs).catch(() => {});
+    }, 1500);
+    return () => clearInterval(iv);
+  }, [reload]);
+
+  /* ---------- 视频选择 ---------- */
+  const selectVideo = useCallback(async (name) => {
+    setCurrent({ name });
+    setSegments([]);
+    setOverlays([]);
+    setSelectedId(null);
+    setEditing(false);
+    setTrimStart(0);
+    try {
+      const info = await api(`/api/videos/${encodeURIComponent(name)}/info`);
+      setMeta(info);
+      const mtime = Date.now();
+      setVideoUrl(`/api/videos/${encodeURIComponent(name)}?t=${mtime}`);
+      toast(`已选择本地视频: ${name}`, 'ok');
+    } catch (e) {
+      toast('读取元数据失败: ' + e.message, 'err');
+    }
+  }, []);
+
+  const duration = meta ? meta.format.duration || 0 : 0;
+  const vw = meta?.video?.width || 1920;
+  const vh = meta?.video?.height || 1080;
+
+  /* ---------- 叠加层 ---------- */
+  const upsertOverlay = useCallback((patch) => {
+    setOverlays((prev) => {
+      const i = prev.findIndex((o) => o.id === patch.id);
+      if (i < 0) return [...prev, patch];
+      const next = [...prev];
+      next[i] = { ...prev[i], ...patch };
+      return next;
+    });
+  }, []);
+  const removeOverlay = useCallback((id) => {
+    setOverlays((p) => p.filter((o) => o.id !== id));
+    setSelectedId((s) => (s === id ? null : s));
+  }, []);
+
+  const addTextOverlay = () => {
+    const o = {
+      id: uid(), type: 'text', text: '示例文字', x: 0.1, y: 0.1,
+      size: 0.06, color: '#ffffff', bg: '', bold: false,
+      rotation: 0, opacity: 1, start: 0, end: null, z: Date.now(),
+    };
+    setOverlays((p) => [...p, o]);
+    setSelectedId(o.id);
+    setEditing(true);
+  };
+
+  const addImageOverlay = (asset) => {
+    const o = {
+      id: uid(), type: 'image', asset: asset.name,
+      x: 0.15, y: 0.15, w: 0.25, h: 0.25, rotation: 0,
+      opacity: 1, start: 0, end: null, z: Date.now(),
+    };
+    setOverlays((p) => [...p, o]);
+    setSelectedId(o.id);
+    setEditing(true);
+  };
+
+  /* ---------- 片段 ---------- */
+  const addSegment = () => {
+    if (trimEnd - trimStart < 0.05) return toast('片段太短', 'err');
+    setSegments((p) => [...p, { start: Math.round(trimStart * 1000) / 1000, end: Math.round(trimEnd * 1000) / 1000 }]);
+    toast('已添加片段', 'ok');
+  };
+
+  /* ---------- 导出 ---------- */
+  const startExport = async () => {
+    const hasOverlays = overlays.length > 0 && (mode === 'clip' || mode === 'full');
+    const params = {
+      format, height: Number(res) || 0, speed, filters,
+      overlays: hasOverlays
+        ? overlays.map((o) => o.type === 'text'
+            ? {
+                type: 'text', text: o.text, x: Math.round(o.x * vw), y: Math.round(o.y * vh),
+                size: Math.round(o.size * vh), color: o.color, bg: o.bg, bold: o.bold,
+                rotation: o.rotation, opacity: o.opacity, start: o.start, end: o.end, z: o.z,
+              }
+            : {
+                type: 'image', asset: o.asset, x: o.x, y: o.y, w: o.w, h: o.h,
+                rotation: o.rotation, opacity: o.opacity, start: o.start, end: o.end, z: o.z,
+              } )
+        : [],
+    };
+    try {
+      let type = mode;
+      if (mode === 'clip') { params.start = trimStart; params.end = trimEnd; }
+      else if (mode === 'segs') { type = 'segments'; params.segments = segments.map((s) => ({ ...s })); }
+      else if (mode === 'audio') { type = 'audio'; params.format = audioFormat; params.start = 0; }
+      else if (mode === 'thumb') { type = 'thumb'; params.at = trimStart; }
+      else { type = 'full'; params.start = 0; params.end = 0; }
+      await api('/api/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, video: current.name, params }),
+      });
+      toast('任务已创建，排队执行中', 'ok');
+      setTimeout(() => api('/api/jobs').then(setJobs).catch(() => {}), 500);
+    } catch (e) {
+      toast('创建任务失败: ' + e.message, 'err');
+    }
+  };
+
+  /* ---------- 画笔成果 -> 叠加图片 ---------- */
+  const publishPaint = async (dataUrl) => {
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      const asset = await uploadFile('/api/assets', 'file', new File([blob], `paint-${Date.now()}.png`, { type: 'image/png' }));
+      addImageOverlay(asset);
+      setAssets((p) => [{ ...asset, url: '/api/assets/' + encodeURIComponent(asset.name), size: blob.size, mtime: Date.now() }, ...p]);
+      toast('画笔作品已作为叠加层添加', 'ok');
+    } catch (e) {
+      toast('发布失败: ' + e.message, 'err');
+    }
+  };
+
+  const segTotal = segments.reduce((s, x) => s + (x.end - x.start), 0);
+
+  return (
+    <>
+      <header className="topbar">
+        <div className="brand">
+          <span className="logo">🎬</span>
+          <div>
+            <h1>FF Web Editor <span className="ver">v2 · React</span></h1>
+            <p className="sub">Video.js 播放 · Konva 叠加 · Fabric 画笔 · ffmpeg 渲染 · systemd 服务 · Caddy 反代</p>
+          </div>
+        </div>
+        <div className="topbar-right">
+          <span className="chip">{health?.ffmpeg || 'ffmpeg …'}</span>
+          <span className={`status-dot ${health?.ok ? 'ok' : 'bad'}`} title="服务状态" />
+        </div>
+      </header>
+
+      <main className="layout">
+        <aside className="col col-left">
+          <Library videos={videos} uploads={uploads} setUploads={setUploads}
+            current={current} onSelect={selectVideo} reload={reload}
+            outputs={outputs} setOutputs={setOutputs} />
+        </aside>
+
+        <section className="col col-mid">
+          <VideoStage
+            ref={playerRef} stageRefEl={stageRef}
+            videoUrl={videoUrl} meta={meta} duration={duration}
+            trimStart={trimStart} trimEnd={trimEnd}
+            onTrimStart={setTrimStart} onTrimEnd={setTrimEnd}
+            curTime={curTime} onTime={setCurTime}
+            overlays={overlays} onOverlaysChange={setOverlays}
+            selectedId={selectedId} onSelect={setSelectedId}
+            editing={editing} setEditing={setEditing}
+            addSegment={addSegment} addTextOverlay={addTextOverlay}
+            onOpenPaint={() => { playerRef.current?.pause(); setPaintOpen(true); }} />
+
+          <div className="quickbar">
+            <span className="dim">当前: {current ? current.name : '未选择'} {duration ? `· ${fmtTime(duration)}` : ''}</span>
+            <span className="spacer" />
+            <button className="btn small ghost" disabled={!segments.length} onClick={() => setSegments([])}>清空片段</button>
+            <button className="btn small" disabled={!current} onClick={() => playerRef.current?.seek(trimStart) || playerRef.current?.play()}>预览选区 ▶</button>
+          </div>
+        </section>
+
+        <aside className="col col-right">
+          <ExportPanel
+            mode={mode} setMode={setMode} format={format} setFormat={setFormat}
+            audioFormat={audioFormat} setAudioFormat={setAudioFormat}
+            res={res} setRes={setRes} speed={speed} setSpeed={setSpeed}
+            filters={filters} setFilters={setFilters}
+            overlays={overlays} trimStart={trimStart} trimEnd={trimEnd}
+            segments={segments} segTotal={segTotal} duration={duration}
+            curTime={curTime} onSeek={(t) => playerRef.current?.seek(t)}
+            onExport={startExport} disabled={!current} />
+
+          <OverlayPanel
+            overlays={overlays} selectedId={selectedId} setSelectedId={setSelectedId}
+            upsertOverlay={upsertOverlay} removeOverlay={removeOverlay}
+            addTextOverlay={addTextOverlay} assets={assets} setAssets={setAssets}
+            addImageOverlay={addImageOverlay} editing={editing} setEditing={setEditing}
+            currentTime={curTime}
+          />
+
+          <SegmentsPanel segments={segments} setSegments={setSegments}
+            trimStart={trimStart} trimEnd={trimEnd}
+            onSeek={(t) => playerRef.current?.seek(t)} />
+
+          <JobsPanel jobs={jobs} setJobs={setJobs} reload={reload} />
+        </aside>
+      </main>
+
+      {paintOpen && (
+        <FabricDrawModal
+          videoEl={playerRef.current?.el}
+          meta={meta} duration={duration} curTime={curTime}
+          onClose={() => setPaintOpen(false)} onPublish={publishPaint} />
+      )}
+      <div id="toasts" className="toast-wrap" />
+    </>
+  );
+}
