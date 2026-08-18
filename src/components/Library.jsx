@@ -1,5 +1,5 @@
 import React from 'react';
-import { uploadFile, toast, fmtSize } from '../api.js';
+import { uploadFile, toast, fmtSize, rel } from '../api.js';
 
 export default function Library({ videos, uploads, setUploads, current, onSelect, reload, outputs, setOutputs }) {
   const fileInput = React.useRef(null);
