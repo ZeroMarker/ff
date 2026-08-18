@@ -1,8 +1,8 @@
 import React from 'react';
-import { fmtSize, fmtTime } from '../api.js';
+import { fmtSize, rel } from '../api.js';
 
 export default function JobsPanel({ jobs, setJobs, reload }) {
-  const act = (u, opts) => fetch(u, opts).then((r) => { if (!r.ok) throw new Error('请求失败'); return r.json(); });
+  const act = (u, opts) => fetch(rel(u), opts).then((r) => { if (!r.ok) throw new Error('请求失败'); return r.json(); });
 
   const del = async (j) => {
     try { await act(`/api/jobs/${j.id}`, { method: 'DELETE' }); setJobs((p) => p.filter((x) => x.id !== j.id)); reload(); }
@@ -33,7 +33,7 @@ export default function JobsPanel({ jobs, setJobs, reload }) {
               <div className="j-fill" style={{ width: `${j.progress || 0}%` }} />
             </div>
             <div className="j-actions">
-              {j.status === 'done' && j.outputUrl && <a href={j.outputUrl} download>⬇ 下载（{fmtSize(j.outputSize)}）</a>}
+              {j.status === 'done' && j.outputUrl && <a href={rel(j.outputUrl)} download>⬇ 下载（{fmtSize(j.outputSize)}）</a>}
               {(j.status === 'queued' || j.status === 'running') && <button className="j-cancel" onClick={() => cancel(j)}>✕ 取消</button>}
               <button className="j-del" onClick={() => del(j)}>删除</button>
             </div>

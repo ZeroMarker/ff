@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Stage, Layer, Rect, Text, Image as KImage, Transformer } from 'react-konva';
+import { rel } from '../api.js';
 
 /* 加载图片资源 Hook */
 function useImage(src) {
@@ -15,7 +16,7 @@ function useImage(src) {
 }
 
 function ImageNode({ o, common, stageW, stageH, refCb, onCommit }) {
-  const img = useImage(o.url || (o.asset ? `/api/assets/${encodeURIComponent(o.asset)}` : ''));
+  const img = useImage(o.url || (o.asset ? rel(`/api/assets/` + encodeURIComponent(o.asset)) : ''));
   if (!img) {
     return (
       <Rect ref={refCb} {...common} width={o.w * stageW} height={o.h * stageH} fill="#1c2430" stroke="#2dd4bf" dash={[4, 4]} listening={false} />

@@ -3,11 +3,14 @@ const TOKEN_KEY = 'ff_token';
 export const getToken = () => localStorage.getItem(TOKEN_KEY) || '';
 export const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
 
+/* 相对路径：兼容 Caddy handle_path 前缀剥离部署；本地开发(/)下等价 */
+export const rel = (p) => './' + String(p || '').replace(/^\/+/g, '');
+
 export async function api(url, opts = {}) {
   const headers = { ...(opts.headers || {}) };
   const t = getToken();
   if (t) headers['x-auth-token'] = t;
-  const res = await fetch(url, { ...opts, headers });
+  const res = await fetch(rel(url), { ...opts, headers });
   if (res.status === 401) throw new Error('需要访问口令');
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
@@ -23,7 +26,7 @@ export function uploadFile(url, field, file, onProgress) {
     const fd = new FormData();
     fd.append(field, file);
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', url);
+    xhr.open('POST', rel(url));
     const t = getToken();
     if (t) xhr.setRequestHeader('x-auth-token', t);
     xhr.upload.onprogress = (e) => {

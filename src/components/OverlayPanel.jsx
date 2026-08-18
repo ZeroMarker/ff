@@ -1,5 +1,5 @@
 import React from 'react';
-import { uploadFile, toast, fmtTime } from '../api.js';
+import { uploadFile, toast, fmtTime, rel } from '../api.js';
 
 export default function OverlayPanel({
   overlays, selectedId, setSelectedId, upsertOverlay, removeOverlay,
@@ -13,7 +13,7 @@ export default function OverlayPanel({
     if (!f) return;
     uploadFile('/api/assets', 'file', f)
       .then((a) => {
-        const rec = { ...a, size: f.size, mtime: Date.now(), url: '/api/assets/' + encodeURIComponent(a.name) };
+        const rec = { ...a, size: f.size, mtime: Date.now(), url: rel(`/api/assets/` + encodeURIComponent(a.name)) };
         setAssets((p) => [rec, ...p]);
         addImageOverlay(rec);
         toast('素材已上传并添加', 'ok');

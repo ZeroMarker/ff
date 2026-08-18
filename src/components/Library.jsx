@@ -8,7 +8,7 @@ export default function Library({ videos, uploads, setUploads, current, onSelect
     for (const f of files) {
       const key = Math.random().toString(36).slice(2);
       setUploads((p) => [...p, { key, name: f.name, pct: 0 }]);
-      uploadFile('/api/upload', 'file', f, (r) =>
+      uploadFile(rel('/api/upload'), 'file', f, (r) =>
         setUploads((p) => p.map((u) => (u.key === key ? { ...u, pct: Math.round(r * 100) } : u))))
         .then(() => { setUploads((p) => p.filter((u) => u.key !== key)); toast(`已导入 ${f.name}`, 'ok'); reload(); })
         .catch((e) => { setUploads((p) => p.filter((u) => u.key !== key)); toast('导入失败: ' + e.message, 'err'); });
@@ -35,8 +35,7 @@ export default function Library({ videos, uploads, setUploads, current, onSelect
           {videos.map((v) => (
             <div key={v.name} className={`file-tile ${current?.name === v.name ? 'active' : ''}`}
               onClick={() => onSelect(v.name)}>
-              <img loading="lazy" src={`/api/videos/${encodeURIComponent(v.name)}/thumbnail?t=${Math.round(v.mtime)}`}
-                alt={v.name} />
+              <img loading="lazy" src={rel(`/api/videos/${encodeURIComponent(v.name)}/thumbnail?t=${Math.round(v.mtime)}`)} alt={v.name} />
               <div className="ft-name">{v.name}</div>
               <div className="ft-size">{fmtSize(v.size)}</div>
             </div>
@@ -61,11 +60,11 @@ export default function Library({ videos, uploads, setUploads, current, onSelect
             <div key={o.name} className="out-item">
               <span className="nm" title={o.name}>{o.name}</span>
               <span className="sz">{fmtSize(o.size)}</span>
-              <a className="a" href={`/api/output/${encodeURIComponent(o.name)}`} download title="下载">⬇</a>
+              <a className="a" href={rel(`/api/output/${encodeURIComponent(o.name)}`)} download title="下载">⬇</a>
               <button className="del" title="删除"
                 onClick={async () => {
                   try {
-                    const r = await fetch(`/api/output/${encodeURIComponent(o.name)}`, { method: 'DELETE' });
+                    const r = await fetch(rel(`/api/output/${encodeURIComponent(o.name)}`), { method: 'DELETE' });
                     if (!r.ok) throw new Error('删除失败');
                     setOutputs((p) => p.filter((x) => x.name !== o.name));
                   } catch (e) { toast(e.message, 'err'); }

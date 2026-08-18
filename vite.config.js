@@ -6,6 +6,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   publicDir: false,
+  base: './', // 相对路径：兼容 Caddy handle_path /edit 前缀剥离的部署模式
   build: {
     outDir: 'public',
     emptyOutDir: true,

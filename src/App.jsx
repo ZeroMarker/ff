@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { api, uploadFile, toast, uid, fmtTime, fmtSize } from './api.js';
+import { api, uploadFile, toast, uid, fmtTime, rel } from './api.js';
 import VideoStage from './components/VideoStage.jsx';
 import Library from './components/Library.jsx';
 import ExportPanel from './components/ExportPanel.jsx';
@@ -78,7 +78,7 @@ export default function App() {
       const info = await api(`/api/videos/${encodeURIComponent(name)}/info`);
       setMeta(info);
       const mtime = Date.now();
-      setVideoUrl(`/api/videos/${encodeURIComponent(name)}?t=${mtime}`);
+      setVideoUrl(rel(`/api/videos/${encodeURIComponent(name)}` + `?t=${mtime}`));
       toast(`已选择本地视频: ${name}`, 'ok');
     } catch (e) {
       toast('读取元数据失败: ' + e.message, 'err');
@@ -174,9 +174,9 @@ export default function App() {
   const publishPaint = async (dataUrl) => {
     try {
       const blob = await (await fetch(dataUrl)).blob();
-      const asset = await uploadFile('/api/assets', 'file', new File([blob], `paint-${Date.now()}.png`, { type: 'image/png' }));
+      const asset = await uploadFile(rel('/api/assets'), 'file', new File([blob], `paint-${Date.now()}.png`, { type: 'image/png' }));
       addImageOverlay(asset);
-      setAssets((p) => [{ ...asset, url: '/api/assets/' + encodeURIComponent(asset.name), size: blob.size, mtime: Date.now() }, ...p]);
+      setAssets((p) => [{ ...asset, url: rel(`/api/assets/` + encodeURIComponent(asset.name)), size: blob.size, mtime: Date.now() }, ...p]);
       toast('画笔作品已作为叠加层添加', 'ok');
     } catch (e) {
       toast('发布失败: ' + e.message, 'err');
