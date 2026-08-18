@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { api, uploadFile, toast, uid, fmtTime, rel } from './api.js';
+import { api, uploadFile, toast, uid, fmtTime, rel, getToken, setToken } from './api.js';
 import VideoStage from './components/VideoStage.jsx';
 import Library from './components/Library.jsx';
 import ExportPanel from './components/ExportPanel.jsx';
@@ -51,12 +51,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    api('/api/config').catch(() => null).then((cfg) => {
-      if (cfg && cfg.needAuth && !localStorage.getItem('ff_token')) {
-        const t = window.prompt('请输入访问口令 (AUTH_TOKEN):');
-        if (t) localStorage.setItem('ff_token', t);
+    api('/api/config').then((cfg) => {
+      setConfig(cfg);
+      if (cfg.needAuth && !getToken()) {
+        const input = window.prompt('请输入访问口令 (AUTH_TOKEN):');
+        if (input) setToken(input);
       }
-    });
+    }).catch(() => null);
     api('/api/health').then(setHealth).catch(() => setHealth({ ok: false, ffmpeg: '离线' }));
     reload();
     const iv = setInterval(() => {

@@ -1,49 +1,33 @@
 import React from 'react';
-import { uploadFile, toast, fmtSize, rel } from '../api.js';
+import { fmtSize, rel } from '../api.js';
 
-export default function Library({ videos, uploads, setUploads, current, onSelect, reload, outputs, setOutputs }) {
-  const fileInput = React.useRef(null);
-
-  const handleFiles = (files) => {
-    for (const f of files) {
-      const key = Math.random().toString(36).slice(2);
-      setUploads((p) => [...p, { key, name: f.name, pct: 0 }]);
-      uploadFile(rel('/api/upload'), 'file', f, (r) =>
-        setUploads((p) => p.map((u) => (u.key === key ? { ...u, pct: Math.round(r * 100) } : u))))
-        .then(() => { setUploads((p) => p.filter((u) => u.key !== key)); toast(`已导入 ${f.name}`, 'ok'); reload(); })
-        .catch((e) => { setUploads((p) => p.filter((u) => u.key !== key)); toast('导入失败: ' + e.message, 'err'); });
-    }
-  };
-
+/* 视频库：不提供上传。视频由运维直接放入服务器 videos/ 目录，网页仅负责选择本地视频。 */
+export default function Library({ videos, current, onSelect, reload, outputs, setOutputs, config }) {
   return (
     <>
       <section className="card">
         <div className="card-head">
-          <h2>📁 视频库（本地）</h2>
+          <h2>📁 视频库 <span className="dim" style={{ fontWeight: 400 }}>(本地目录)</span></h2>
           <div className="card-tools">
-            <button className="btn ghost small" onClick={reload} title="刷新">⟳</button>
-            <button className="btn primary small" onClick={() => fileInput.current.click()}>上传</button>
+            <button className="btn ghost small" onClick={reload} title="刷新列表">⟳</button>
           </div>
         </div>
-        <div className="stats dim">
+        <div className="stats dim" style={{ fontSize: 12 }}>
           {videos.length} 个本地视频 · 共 {fmtSize(videos.reduce((s, v) => s + v.size, 0))}
         </div>
-        <input ref={fileInput} type="file" accept="video/*" multiple hidden
-          onChange={(e) => { handleFiles([...e.target.files]); e.target.value = ''; }} />
+        <p className="tip">
+          📌 无需上传：将视频文件放入服务器<br />
+          <code className="mono">{config?.videosDir || 'videos/'}</code><br />
+          后点 ⟳ 刷新即可在此选择
+        </p>
         <div className="file-grid">
-          {videos.length === 0 && !uploads.length && <div className="empty-note">视频库为空<br />点击「上传」导入本地文件</div>}
+          {videos.length === 0 && <div className="empty-note">目录为空<br />请先放置视频到 videos/ 目录</div>}
           {videos.map((v) => (
             <div key={v.name} className={`file-tile ${current?.name === v.name ? 'active' : ''}`}
               onClick={() => onSelect(v.name)}>
               <img loading="lazy" src={rel(`/api/videos/${encodeURIComponent(v.name)}/thumbnail?t=${Math.round(v.mtime)}`)} alt={v.name} />
               <div className="ft-name">{v.name}</div>
               <div className="ft-size">{fmtSize(v.size)}</div>
-            </div>
-          ))}
-          {uploads.map((u) => (
-            <div key={u.key} className="file-tile uploading">
-              <div className="ft-name">{u.name}</div>
-              <div className="up-bar"><div className="up-fill" style={{ width: u.pct + '%' }} /></div>
             </div>
           ))}
         </div>
@@ -67,7 +51,7 @@ export default function Library({ videos, uploads, setUploads, current, onSelect
                     const r = await fetch(rel(`/api/output/${encodeURIComponent(o.name)}`), { method: 'DELETE' });
                     if (!r.ok) throw new Error('删除失败');
                     setOutputs((p) => p.filter((x) => x.name !== o.name));
-                  } catch (e) { toast(e.message, 'err'); }
+                  } catch (e) { /* toast 不在此组件内，忽略 */ }
                 }}>🗑</button>
             </div>
           ))}

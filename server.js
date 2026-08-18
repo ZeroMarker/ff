@@ -43,6 +43,7 @@ const JOBS_FILE = path.resolve(process.env.JOBS_FILE || path.join(ROOT, 'jobs', 
 const MAX_CONCURRENCY = parseInt(process.env.MAX_CONCURRENCY, 10) || 2;
 const MAX_UPLOAD = parseInt(process.env.MAX_UPLOAD_MB, 10) || 8192; // MB
 const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
+const UPLOAD_ENABLED = process.env.UPLOAD_ENABLED === '1' || process.env.UPLOAD_ENABLED === 'true'; // 视频不走上传，默认关闭
 
 for (const dir of [VIDEOS_DIR, OUTPUT_DIR, ASSETS_DIR, THUMBS_DIR, path.dirname(JOBS_FILE)]) {
   fs.mkdirSync(dir, { recursive: true });
@@ -324,7 +325,15 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true, uptime: process.uptime(), ffmpeg: ff.ffmpegVersion(), now: Date.now() });
 });
 app.get('/api/config', (req, res) => {
-  res.json({ maxConcurrency: MAX_CONCURRENCY, maxUploadMb: MAX_UPLOAD, needAuth: !!AUTH_TOKEN, hasAudio: true });
+  res.json({
+    maxConcurrency: MAX_CONCURRENCY,
+    maxUploadMb: MAX_UPLOAD,
+    needAuth: !!AUTH_TOKEN,
+    httpPort: PORT,
+    uploadEnabled: UPLOAD_ENABLED,
+    videosDir: VIDEOS_DIR,
+    outputDir: OUTPUT_DIR,
+  });
 });
 
 /* ---------- 视频库 ---------- */
@@ -332,16 +341,21 @@ app.get('/api/videos', (req, res) => {
   res.json(listVideos());
 });
 
-app.post('/api/upload', upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: '未收到文件(字段名 file)' });
-  const name = req.file.filename;
-  let info = null;
-  try { info = ff.probe(req.file.path).format; } catch { /* 非媒体文件 */ }
-  if (info && !info.duration && !info.name) {
-    fs.unlinkSync(req.file.path);
-    return res.status(400).json({ error: '不是可识别的媒体文件' });
-  }
-  res.json({ name, size: req.file.size, info });
+/* 视频上传（默认关闭：视频由运维直接放入本地 videos/ 目录） */
+app.post('/api/upload', (req, res) => {
+  if (!UPLOAD_ENABLED) return res.status(403).json({ error: '上传已关闭：请将视频直接放入服务器 videos/ 目录' });
+  upload.single('file')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: '未收到文件(字段名 file)' });
+    const name = req.file.filename;
+    let info = null;
+    try { info = ff.probe(req.file.path).format; } catch { /* 非媒体文件 */ }
+    if (info && !info.duration && !info.name) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: '不是可识别的媒体文件' });
+    }
+    res.json({ name, size: req.file.size, info });
+  });
 });
 
 /* 流式播放(支持 Range/seek) */
