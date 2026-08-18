@@ -79,9 +79,13 @@ export default function App() {
     setSelectedId(null);
     setEditing(false);
     setTrimStart(0);
+    // 结束时间必须随新视频的元数据初始化，否则开始滑块会被
+    // trimEnd - 0.01 约束到负数，两个受控滑块都会表现为无法调整。
+    setTrimEnd(0);
     try {
       const info = await api(`/api/fs/info?path=${encodeURIComponent(path)}`);
       setMeta(info);
+      setTrimEnd(Math.max(0, Number(info?.format?.duration) || 0));
       setVideoUrl(rel(`/api/fs/video?path=${encodeURIComponent(path)}&t=${Date.now()}`));
       toast(`已选择: ${path}`, 'ok');
     } catch (e) {

@@ -102,18 +102,33 @@ const VideoStage = forwardRef(function VideoStage(props, ref) {
   }, [meta, videoUrl, stageRefEl]);
 
   /* 时间轴约束 */
+  const mediaDuration = Number.isFinite(Number(duration)) ? Math.max(0, Number(duration)) : 0;
+  const rangeMax = mediaDuration || 1;
+  const minGap = mediaDuration > 0 ? Math.min(0.01, mediaDuration) : 0;
+  const startLimit = Math.max(0, mediaDuration - minGap);
+  const safeTrimStart = Math.min(Math.max(0, Number(trimStart) || 0), startLimit);
+  const safeTrimEnd = mediaDuration > 0
+    ? Math.min(Math.max(Number(trimEnd) || mediaDuration, safeTrimStart + minGap), mediaDuration)
+    : 0;
+
   const onStartInput = (v) => {
-    const val = Math.min(Math.max(0, parseFloat(v)), parseFloat(trimEnd) - 0.01);
+    const input = Number(v);
+    if (!Number.isFinite(input)) return;
+    const end = mediaDuration > 0 ? safeTrimEnd : Number(trimEnd) || 0;
+    const val = Math.min(Math.max(0, input), Math.max(0, end - minGap));
     onTrimStart(Math.round(val * 1000) / 1000);
   };
   const onEndInput = (v) => {
-    const val = Math.max(Math.min(parseFloat(duration) || 0, parseFloat(v)), parseFloat(trimStart) + 0.01);
+    const input = Number(v);
+    if (!Number.isFinite(input)) return;
+    const start = Math.max(0, Number(trimStart) || 0);
+    const val = Math.max(Math.min(mediaDuration, input), Math.min(mediaDuration, start + minGap));
     onTrimEnd(Math.round(val * 1000) / 1000);
   };
 
   const step = (target, delta) => {
-    if (target === 'start') onStartInput((parseFloat(trimStart) + delta).toFixed(3));
-    else onEndInput((parseFloat(trimEnd) + delta).toFixed(3));
+    if (target === 'start') onStartInput((safeTrimStart + delta).toFixed(3));
+    else onEndInput((safeTrimEnd + delta).toFixed(3));
   };
 
   const seek = (t) => playerRef.current && playerRef.current.currentTime(t);
@@ -156,9 +171,9 @@ const VideoStage = forwardRef(function VideoStage(props, ref) {
             <button className="btn tiny" onClick={() => step('start', -0.2)}>−0.2s</button>
             <button className="btn tiny" onClick={() => step('start', 0.2)}>+0.2s</button>
           </span>
-          <input type="range" className="tl-slider" min={0} max={duration || 1} step={0.01}
-            value={Math.min(trimStart, (trimEnd || 0) - 0.01)} onChange={(e) => onStartInput(e.target.value)} />
-          <span className="tl-time">{fmtTime(trimStart)}</span>
+          <input type="range" className="tl-slider" min={0} max={rangeMax} step={0.01}
+            value={safeTrimStart} onChange={(e) => onStartInput(e.target.value)} />
+          <span className="tl-time">{fmtTime(safeTrimStart)}</span>
         </div>
         <div className="tl-row">
           <span className="tl-label">结束</span>
@@ -166,23 +181,23 @@ const VideoStage = forwardRef(function VideoStage(props, ref) {
             <button className="btn tiny" onClick={() => step('end', -0.2)}>−0.2s</button>
             <button className="btn tiny" onClick={() => step('end', 0.2)}>+0.2s</button>
           </span>
-          <input type="range" className="tl-slider accent" min={0} max={duration || 1} step={0.01}
-            value={Math.min(trimEnd || duration || 1, duration || 1)} onChange={(e) => onEndInput(e.target.value)} />
-          <span className="tl-time">{fmtTime(trimEnd)}</span>
+          <input type="range" className="tl-slider accent" min={0} max={rangeMax} step={0.01}
+            value={safeTrimEnd} onChange={(e) => onEndInput(e.target.value)} />
+          <span className="tl-time">{fmtTime(safeTrimEnd)}</span>
         </div>
         <div className="tl-bar">
           <div className="tl-fill" style={{
-            left: `${(trimStart / (duration || 1)) * 100}%`,
-            width: `${Math.max(0, ((trimEnd - trimStart) / (duration || 1)) * 100)}%`,
+            left: `${(safeTrimStart / rangeMax) * 100}%`,
+            width: `${Math.max(0, ((safeTrimEnd - safeTrimStart) / rangeMax) * 100)}%`,
           }} />
           <div className="tl-playhead" ref={playheadRef}
-            style={{ transform: `translateX(${(curTime / (duration || 1)) * 100}%)` }} />
+            style={{ transform: `translateX(${(curTime / rangeMax) * 100}%)` }} />
         </div>
         <div className="tl-row tl-tools">
           <button className="btn small" onClick={addSegment} disabled={!meta}>＋ 添加到片段列表</button>
           <button className="btn small ghost" onClick={preview} disabled={!meta}>预览选区 ▶</button>
           <span className="spacer" />
-          <span className="dim">选区 {fmtTime(Math.max(0, trimEnd - trimStart))}</span>
+          <span className="dim">选区 {fmtTime(Math.max(0, safeTrimEnd - safeTrimStart))}</span>
           <button className="btn small ghost" onClick={() => setEditing(!editing)} disabled={!meta || !overlays.length}>
             叠加层 {overlays.length} 项
           </button>
