@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>"/>
+<title>FF Web Editor · 网页视频剪辑</title>
+<link rel="stylesheet" href="/style.css"/>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">🎬</span>
+    <div>
+      <h1>FF Web Editor</h1>
+      <p class="sub">本地视频 · ffmpeg 驱动 · systemd 服务 · Caddy 反代</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <span id="ffver" class="chip">ffmpeg …</span>
+    <span id="statusDot" class="status-dot" title="服务状态"></span>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- ============ 左侧：文件库 ============ -->
+  <aside class="col col-left">
+    <section class="card">
+      <div class="card-head">
+        <h2>📁 视频库</h2>
+        <div class="card-tools">
+          <button id="refreshBtn" class="btn ghost" title="刷新">⟳</button>
+          <button id="uploadBtn" class="btn primary small">上传</button>
+        </div>
+      </div>
+      <div class="stats" id="libStats"></div>
+      <div class="file-grid" id="fileList"></div>
+      <input type="file" id="fileInput" accept="video/*" hidden multiple/>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>🗂️ 输出文件</h2>
+        <button id="outRefresh" class="btn ghost small" title="刷新">⟳</button>
+      </div>
+      <div class="out-list" id="outList"></div>
+    </section>
+  </aside>
+
+  <!-- ============ 中间：预览与时间轴 ============ -->
+  <section class="col col-mid">
+    <section class="card stage-card">
+      <div class="stage-empty" id="stageEmpty">
+        <div class="empty-big">🎬</div>
+        <p>从左侧选择一个视频开始编辑</p>
+        <p class="dim">或点「上传」导入本地文件</p>
+      </div>
+      <video id="videoEl" controls playsinline preload="metadata" hidden></video>
+
+      <div class="timeline" id="timeline" hidden>
+        <div class="tl-row">
+          <span class="tl-label">开始</span>
+          <span class="tl-btns">
+            <button class="btn tiny" data-step="-0.2" data-target="start">−0.2s</button>
+            <button class="btn tiny" data-step="0.2" data-target="start">+0.2s</button>
+          </span>
+          <input type="range" id="trimStart" class="tl-slider" min="0" max="0" step="0.01" value="0"/>
+          <span class="tl-time" id="startTime">00:00.000</span>
+        </div>
+        <div class="tl-row">
+          <span class="tl-label">结束</span>
+          <span class="tl-btns">
+            <button class="btn tiny" data-step="-0.2" data-target="end">−0.2s</button>
+            <button class="btn tiny" data-step="0.2" data-target="end">+0.2s</button>
+          </span>
+          <input type="range" id="trimEnd" class="tl-slider accent" min="0" max="0" step="0.01" value="0"/>
+          <span class="tl-time" id="endTime">00:00.000</span>
+        </div>
+        <div class="tl-bar" id="tlBar">
+          <div class="tl-fill" id="tlFill"></div>
+          <div class="tl-playhead" id="tlPlayhead"></div>
+        </div>
+        <div class="tl-row tl-tools">
+          <span class="dim" id="tlInfo">-</span>
+          <span class="spacer"></span>
+          <button id="segBtn" class="btn small" disabled>＋ 添加到片段列表</button>
+          <button id="prevSelBtn" class="btn small ghost">预览选区</button>
+          <button id="seekStartBtn" class="btn small ghost">跳到开始</button>
+        </div>
+      </div>
+    </section>
+  </section>
+
+  <!-- ============ 右侧：编辑与任务 ============ -->
+  <aside class="col col-right">
+
+    <section class="card">
+      <div class="card-head"><h2>✂️ 导出</h2></div>
+
+      <div class="field">
+        <label class="field-label">模式</label>
+        <div class="seg" id="modeSeg">
+          <label class="seg-item"><input type="radio" name="mode" value="clip" checked/><span>区间</span></label>
+          <label class="seg-item"><input type="radio" name="mode" value="segments"/><span>片段拼接</span></label>
+          <label class="seg-item"><input type="radio" name="mode" value="full"/><span>整片</span></label>
+          <label class="seg-item"><input type="radio" name="mode" value="audio"/><span>音频</span></label>
+          <label class="seg-item"><input type="radio" name="mode" value="thumb"/><span>封面</span></label>
+        </div>
+      </div>
+
+      <div class="field" id="formatField">
+        <label class="field-label">格式</label>
+        <select id="formatSel" class="select">
+          <option value="mp4" selected>MP4 (H.264+AAC)</option>
+          <option value="webm">WebM (VP9+Opus)</option>
+          <option value="mov">MOV (ProRes友好)</option>
+          <option value="mkv">MKV</option>
+          <option value="gif">GIF 动图</option>
+        </select>
+      </div>
+
+      <div class="field" id="audioFormatField" hidden>
+        <label class="field-label">音频格式</label>
+        <select id="audioFormatSel" class="select">
+          <option value="mp3" selected>MP3 (192k)</option>
+          <option value="m4a">M4A (AAC)</option>
+          <option value="aac">AAC</option>
+          <option value="ogg">OGG (Vorbis)</option>
+          <option value="flac">FLAC (无损)</option>
+          <option value="wav">WAV (PCM 48k)</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="field-label">分辨率</label>
+        <select id="resSel" class="select">
+          <option value="0" selected>原画</option>
+          <option value="2160">4K (2160p)</option>
+          <option value="1440">2K (1440p)</option>
+          <option value="1080">1080p</option>
+          <option value="720">720p</option>
+          <option value="480">480p</option>
+          <option value="360">360p</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="field-label">倍速 <span class="dim" id="speedVal">1x</span></label>
+        <input type="range" id="speedSel" min="0.25" max="4" step="0.25" value="1"/>
+      </div>
+
+      <div class="field">
+        <label class="field-label">滤镜</label>
+        <div class="chips">
+          <label class="chip-item"><input type="checkbox" value="grayscale"/><span>灰度</span></label>
+          <label class="chip-item"><input type="checkbox" value="negative"/><span>反色</span></label>
+          <label class="chip-item"><input type="checkbox" value="mirror"/><span>镜像</span></label>
+          <label class="chip-item"><input type="checkbox" value="blur"/><span>模糊</span></label>
+          <label class="chip-item"><input type="checkbox" value="vignette"/><span>暗角</span></label>
+          <label class="chip-item"><input type="checkbox" value="sharpen"/><span>锐化</span></label>
+        </div>
+      </div>
+
+      <button id="exportBtn" class="btn primary block" disabled>开始导出</button>
+      <p class="dim center" id="exportSummary">请先选择视频</p>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>📋 片段列表 <span class="badge" id="segCount">0</span></h2>
+        <button id="clearSegBtn" class="btn ghost small" disabled>清空</button>
+      </div>
+      <table class="seg-table" id="segTable">
+        <thead><tr><th>#</th><th>开始</th><th>结束</th><th>时长</th><th></th></tr></thead>
+        <tbody id="segBody"></tbody>
+      </table>
+      <p class="dim" id="segTotal"></p>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>⚙️ 任务 <span class="badge" id="jobCount">0</span></h2>
+        <button id="clearDoneBtn" class="btn ghost small">清除完成</button>
+      </div>
+      <div id="jobsList" class="jobs-list"></div>
+    </section>
+
+  </aside>
+</main>
+
+<div class="toast-wrap" id="toasts"></div>
+<script src="/app.js"></script>
+</body>
+</html>

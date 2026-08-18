@@ -1,0 +1,25 @@
+# Caddy 接入：与现有 20070809.xyz 站点的模式保持一致，新增 /edit 前缀
+# 在该站点的 site block 内添加（见下方示例），或单独建站：
+#   edit.example.com {
+#       basicauth { admin $2a$14$... }   # 可选，与主站一致
+#       reverse_proxy 127.0.0.1:8345
+#   }
+
+# ── 直接插入现有 20070809.xyz 站点块内 ──
+#   redir /edit /edit/ 308
+#   handle_path /edit/* {
+#       reverse_proxy 127.0.0.1:8345
+#   }
+
+# ── 如需独立站点（HTTPS 自动证书） ──
+edit.example.com {
+	encode gzip
+	request_body {
+		max_size 20GB
+	}
+	# 与主站相同的 basicauth（替换为自己的哈希）
+	basicauth {
+		admin $2a$14$nyaXDeTjCcoVrr93NXPDIekDPijHlBPi.Afm2.BNBdxneEYwNqvuO
+	}
+	reverse_proxy 127.0.0.1:8345
+}

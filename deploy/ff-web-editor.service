@@ -1,0 +1,29 @@
+[Unit]
+Description=FF Web Editor - Web 视频编辑服务 (ffmpeg wrapper)
+Documentation=https://github.com/ZeroMarker/ff
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/ff
+Environment=NODE_ENV=production
+# 可选：从 .env 注入 PORT / AUTH_TOKEN 等
+EnvironmentFile=-/home/ubuntu/ff/.env
+ExecStart=/usr/bin/env node server.js
+Restart=on-failure
+RestartSec=3
+# 防止 OOM 时被误杀
+OOMScoreAdjust=-500
+# 大文件上传/输出需要足够文件描述符
+LimitNOFILE=65536
+# 标准输出进 journald：journalctl -u ff-web-editor -f
+StandardOutput=journal
+StandardError=journal
+# ffmpeg 子进程会自带 CPU 占满；限制自身 nice 以免拖垮整机
+Nice=5
+
+[Install]
+WantedBy=multi-user.target
