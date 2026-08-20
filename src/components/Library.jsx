@@ -6,17 +6,25 @@ export default function Library({ current, onSelect, config, reload, outputs, se
   const [dir, setDir] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
+  const navigateRequestRef = useRef(0);
 
   const navigate = useCallback(async (p) => {
+    const requestId = ++navigateRequestRef.current;
     setLoading(true); setErr('');
     try {
       const d = await api(`/api/fs?path=${encodeURIComponent(p || '')}`);
+      if (requestId !== navigateRequestRef.current) return;
       setDir(d);
-    } catch (e) { setErr(e.message); }
-    setLoading(false);
+    } catch (e) {
+      if (requestId === navigateRequestRef.current) setErr(e.message);
+    } finally {
+      if (requestId === navigateRequestRef.current) setLoading(false);
+    }
   }, []);
 
-  useEffect(() => { navigate(config?.fsRoots?.[0] || '/'); }, [config, navigate]);
+  useEffect(() => {
+    if (config?.fsRoots?.length) navigate(config.fsRoots[0]);
+  }, [config, navigate]);
 
   const inConcat = (path) => concatList.some((x) => x.path === path);
   const toggleConcat = (item) => {
@@ -91,7 +99,7 @@ export default function Library({ current, onSelect, config, reload, outputs, se
           <button className="btn ghost small" disabled={!concatList.length} onClick={() => setConcatList([])}>清空</button>
         </div>
         <div className="concat-list">
-          {!concatList.length && <p className="dim center" style={{ fontSize: 12 }}>在上方文件列表点 ＋ 添加，导出面板选「片段拼接」为多文件拼接</p>}
+          {!concatList.length && <p className="dim center" style={{ fontSize: 12 }}>在上方文件列表点 ＋ 添加，导出面板选「拼接清单」进行多文件拼接</p>}
           {concatList.map((it, i) => (
             <div key={it.path} className="concat-item">
               <span className="ci-idx">{i + 1}</span>
@@ -117,7 +125,7 @@ export default function Library({ current, onSelect, config, reload, outputs, se
               <button className="del" title="删除"
                 onClick={async () => {
                   try {
-                    await fetch(rel(o.deleteUrl || `/api/output/${encodeURIComponent(o.name)}`), { method: 'DELETE' });
+                    await api(o.deleteUrl || `/api/output/${encodeURIComponent(o.name)}`, { method: 'DELETE' });
                     reload();
                   } catch {}
                 }}>🗑</button>

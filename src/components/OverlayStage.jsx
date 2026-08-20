@@ -38,6 +38,7 @@ export default function OverlayStage({
   const { w: stageW, h: stageH } = stageSize;
   const trRef = useRef(null);
   const nodeRefs = useRef({});
+  const selectedOverlay = overlays.find((o) => o.id === selectedId);
 
   /* 选中项绑定 Transformer */
   useEffect(() => {
@@ -58,16 +59,23 @@ export default function OverlayStage({
   };
 
   const commit = useCallback((o, node) => {
+    const scaleX = Math.abs(node.scaleX());
+    const scaleY = Math.abs(node.scaleY());
     const next = {
       ...o,
       x: Math.round((node.x() / stageW) * 1000) / 1000,
       y: Math.round((node.y() / stageH) * 1000) / 1000,
       rotation: Math.round(node.rotation() * 10) / 10,
     };
-    if (node.width && node.height) {
-      next.w = Math.round((node.width() / stageW) * 1000) / 1000;
-      next.h = Math.round((node.height() / stageH) * 1000) / 1000;
+    if (o.type === 'image') {
+      next.w = Math.round(((node.width() * scaleX) / stageW) * 1000) / 1000;
+      next.h = Math.round(((node.height() * scaleY) / stageH) * 1000) / 1000;
+    } else if (o.type === 'text') {
+      next.size = Math.round((o.size * scaleY) * 1000) / 1000;
     }
+    // Transformer 改的是节点 scale；归一化后把真实尺寸留在业务状态中，供导出使用。
+    node.scaleX(1);
+    node.scaleY(1);
     onOverlaysChange((prev) => prev.map((it) => (it.id === next.id ? next : it)));
   }, [stageW, stageH, onOverlaysChange]);
 
@@ -113,8 +121,12 @@ export default function OverlayStage({
             <Transformer
               ref={trRef}
               rotateEnabled={editing}
-              enabledAnchors={editing ? ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'middle-left', 'middle-right'] : []}
-              keepRatio={false}
+              enabledAnchors={editing
+                ? (selectedOverlay?.type === 'text'
+                    ? ['top-left', 'top-right', 'bottom-left', 'bottom-right']
+                    : ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'middle-left', 'middle-right'])
+                : []}
+              keepRatio={selectedOverlay?.type === 'text'}
               boundBoxFunc={(oldBox, newBox) => (newBox.width > 8 && newBox.height > 8 ? newBox : oldBox)}
               borderStroke="#2dd4bf" anchorStroke="#2dd4bf" anchorFill="#10312c"
             />

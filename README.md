@@ -81,7 +81,7 @@ sudo systemctl restart ff-web-editor
 | `FS_ROOTS` | 见说明 | 文件浏览白名单根目录(冒号分隔)，默认 `videos,输出,家目录,/media /mnt /tmp /srv` |
 | `MAX_CONCURRENCY` | `2` | ffmpeg 并行任务数 |
 | `MAX_UPLOAD_MB` | `8192` | 视频上传上限 |
-| `AUTH_TOKEN` | 空 | 设置后 API 需 `x-auth-token` 头 |
+| `AUTH_TOKEN` | 空 | 设置后网页提示输入口令；API 也接受 `x-auth-token` 请求头 |
 
 ## 安全设计（限制选择本地文件）
 

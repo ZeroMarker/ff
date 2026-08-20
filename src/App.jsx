@@ -42,6 +42,7 @@ export default function App() {
 
   const playerRef = useRef(null);
   const stageRef = useRef(null);
+  const selectRequestRef = useRef(0);
 
   const reload = useCallback(async () => {
     const [v, o, a, j] = await Promise.all([
@@ -54,26 +55,55 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    api('/api/config').then((cfg) => {
-      setConfig(cfg);
-      if (cfg.needAuth && !getToken()) {
-        const input = window.prompt('请输入访问口令 (AUTH_TOKEN):');
-        if (input) setToken(input);
+    let cancelled = false;
+    let iv = null;
+    const bootstrap = async () => {
+      try {
+        const cfg = await api('/api/config');
+        if (cancelled) return;
+        setConfig(cfg);
+        if (cfg.needAuth) {
+          if (!getToken()) {
+            const input = window.prompt('请输入访问口令 (AUTH_TOKEN):');
+            if (input) setToken(input);
+          }
+          try {
+            await api('/api/auth/session', { method: 'POST' });
+          } catch {
+            const input = window.prompt('访问口令无效，请重新输入:');
+            if (!input) throw new Error('需要访问口令');
+            setToken(input);
+            await api('/api/auth/session', { method: 'POST' });
+          }
+        }
+        if (cancelled) return;
+        await Promise.all([
+          api('/api/health').then(setHealth),
+          reload(),
+        ]);
+        if (cancelled) return;
+        iv = setInterval(() => {
+          api('/api/jobs').then(setJobs).catch(() => {});
+          api('/api/outputs').then(setOutputs).catch(() => {});
+        }, 1500);
+      } catch (e) {
+        if (!cancelled) {
+          setHealth({ ok: false, ffmpeg: '离线' });
+          toast(e.message, 'err');
+        }
       }
-    }).catch(() => null);
-    api('/api/health').then(setHealth).catch(() => setHealth({ ok: false, ffmpeg: '离线' }));
-    reload();
-    const iv = setInterval(() => {
-      api('/api/jobs').then(setJobs).catch(() => {});
-      api('/api/outputs').then(setOutputs).catch(() => {});
-    }, 1500);
-    return () => clearInterval(iv);
+    };
+    bootstrap();
+    return () => { cancelled = true; if (iv) clearInterval(iv); };
   }, [reload]);
 
   /* ---------- 视频选择（任意白名单路径） ---------- */
   const selectVideo = useCallback(async (path) => {
+    const requestId = ++selectRequestRef.current;
     const name = path.split(/[\\/]/).pop();
     setCurrent({ path, name });
+    setMeta(null);
+    setVideoUrl('');
     setSegments([]);
     setOverlays([]);
     setSelectedId(null);
@@ -84,11 +114,13 @@ export default function App() {
     setTrimEnd(0);
     try {
       const info = await api(`/api/fs/info?path=${encodeURIComponent(path)}`);
+      if (requestId !== selectRequestRef.current) return;
       setMeta(info);
       setTrimEnd(Math.max(0, Number(info?.format?.duration) || 0));
       setVideoUrl(rel(`/api/fs/video?path=${encodeURIComponent(path)}&t=${Date.now()}`));
       toast(`已选择: ${path}`, 'ok');
     } catch (e) {
+      if (requestId !== selectRequestRef.current) return;
       toast('读取元数据失败: ' + e.message, 'err');
     }
   }, []);
@@ -252,7 +284,7 @@ export default function App() {
             overlays={overlays} trimStart={trimStart} trimEnd={trimEnd}
             segments={segments} segTotal={segTotal} duration={duration}
             curTime={curTime} onSeek={(t) => playerRef.current?.seek(t)}
-            onExport={startExport} disabled={!current}
+            onExport={startExport} disabled={mode !== 'concat' && !current}
             concatList={concatList} />
 
           <OverlayPanel

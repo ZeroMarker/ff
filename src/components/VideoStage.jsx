@@ -52,7 +52,8 @@ const VideoStage = forwardRef(function VideoStage(props, ref) {
   useEffect(() => {
     const p = playerRef.current;
     if (!p || !videoUrl) return;
-    p.src({ src: videoUrl, type: 'video/mp4' });
+    // 让浏览器依据响应的 Content-Type 选择解码器；文件浏览器支持的不只有 MP4。
+    p.src({ src: videoUrl });
     p.currentTime(0);
     setReady(false);
     lastTimeRef.current = 0;

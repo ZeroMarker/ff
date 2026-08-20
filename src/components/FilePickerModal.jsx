@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { api, fmtSize, rel, fmtTime } from '../api.js';
 
 /* 网页弹窗选择本地视频：在服务器白名单根目录内浏览任意路径 */
@@ -8,17 +8,22 @@ export default function FilePickerModal({ open, onClose, onPick, current }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [preview, setPreview] = useState(null); // 预览信息 {meta, path}
+  const navigateRequestRef = useRef(0);
+  const previewRequestRef = useRef(0);
 
   const navigate = useCallback(async (p) => {
+    const requestId = ++navigateRequestRef.current;
     setLoading(true); setErr('');
     try {
       const d = await api(`/api/fs?path=${encodeURIComponent(p || '')}`);
+      if (requestId !== navigateRequestRef.current) return;
       setDir(d);
-    } catch (e) { setErr(e.message); }
-    setLoading(false);
+    } catch (e) {
+      if (requestId === navigateRequestRef.current) setErr(e.message);
+    } finally {
+      if (requestId === navigateRequestRef.current) setLoading(false);
+    }
   }, []);
-
-  useEffect(() => { if (open) { navigate(current?.path ? dirnameAccessible(current.path) : ''); } /* eslint-disable-line */ }, [open]);
 
   /* 打开时定位到当前视频所在目录 */
   const dirnameAccessible = (p) => p.split('/').slice(0, -1).join('/') || '/';
@@ -28,6 +33,7 @@ export default function FilePickerModal({ open, onClose, onPick, current }) {
     const start = current?.path ? dirnameAccessible(current.path) : '';
     navigate(start);
     setSel(current ? { path: current.path, name: current.name } : null);
+    setPreview(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -45,9 +51,14 @@ export default function FilePickerModal({ open, onClose, onPick, current }) {
   };
 
   const pickVideo = (item) => {
+    const requestId = ++previewRequestRef.current;
     setSel({ path: item.path, name: item.name, size: item.size });
     api(`/api/fs/info?path=${encodeURIComponent(item.path)}`)
-      .then(setPreview).catch(() => setPreview(null));
+      .then((info) => {
+        if (requestId === previewRequestRef.current) setPreview(info);
+      }).catch(() => {
+        if (requestId === previewRequestRef.current) setPreview(null);
+      });
   };
 
   const previewUrl = sel ? rel(`/api/fs/video?path=${encodeURIComponent(sel.path)}`) : '';

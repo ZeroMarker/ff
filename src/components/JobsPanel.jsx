@@ -1,8 +1,8 @@
 import React from 'react';
-import { fmtSize, rel } from '../api.js';
+import { api, fmtSize, rel } from '../api.js';
 
 export default function JobsPanel({ jobs, setJobs, reload }) {
-  const act = (u, opts) => fetch(rel(u), opts).then((r) => { if (!r.ok) throw new Error('请求失败'); return r.json(); });
+  const act = (u, opts) => api(u, opts);
 
   const del = async (j) => {
     try { await act(`/api/jobs/${j.id}`, { method: 'DELETE' }); setJobs((p) => p.filter((x) => x.id !== j.id)); reload(); }

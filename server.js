@@ -43,6 +43,10 @@ const JOBS_FILE = path.resolve(process.env.JOBS_FILE || path.join(ROOT, 'jobs', 
 const MAX_CONCURRENCY = parseInt(process.env.MAX_CONCURRENCY, 10) || 2;
 const MAX_UPLOAD = parseInt(process.env.MAX_UPLOAD_MB, 10) || 8192; // MB
 const AUTH_TOKEN = process.env.AUTH_TOKEN || '';
+const AUTH_COOKIE = 'ff_session';
+const AUTH_SESSION = AUTH_TOKEN
+  ? crypto.createHmac('sha256', AUTH_TOKEN).update('ff-web-editor-session').digest('hex')
+  : '';
 const UPLOAD_ENABLED = process.env.UPLOAD_ENABLED === '1' || process.env.UPLOAD_ENABLED === 'true'; // 视频不走上传，默认关闭
 
 /* ------------------------------------------------------------------ */
@@ -439,10 +443,20 @@ const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '2mb' }));
 
-// 可选简单鉴权：AUTH_TOKEN 设置后，/api/* 需携带 x-auth-token
+function cookieValue(req, name) {
+  const entry = String(req.headers.cookie || '').split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(name + '='));
+  if (!entry) return '';
+  try { return decodeURIComponent(entry.slice(name.length + 1)); } catch { return ''; }
+}
+
+// 可选简单鉴权：API 客户端用请求头，浏览器原生媒体请求用登录会话 cookie。
 app.use('/api', (req, res, next) => {
   if (!AUTH_TOKEN) return next();
   if (req.get('x-auth-token') === AUTH_TOKEN) return next();
+  // 原生 video/img/a 请求无法附加自定义请求头，登录后改用 HttpOnly 会话 cookie。
+  if (cookieValue(req, AUTH_COOKIE) === AUTH_SESSION) return next();
   if (req.path === '/config') return next(); // 允许读取配置以便前端提示
   res.status(401).json({ error: '需要 token，请刷新页面输入访问口令' });
 });
@@ -464,6 +478,20 @@ app.get('/api/config', (req, res) => {
     outputDir: OUTPUT_DIR,
     fsRoots: FS_ROOTS,
   });
+});
+
+app.post('/api/auth/session', (req, res) => {
+  if (AUTH_TOKEN) {
+    const forwardedProto = String(req.get('x-forwarded-proto') || '').split(',')[0].trim();
+    res.cookie(AUTH_COOKIE, AUTH_SESSION, {
+      httpOnly: true,
+      sameSite: 'strict',
+      secure: req.secure || forwardedProto === 'https',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+      path: '/',
+    });
+  }
+  res.json({ ok: true });
 });
 
 /* ---------- 视频库 ---------- */
