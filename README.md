@@ -83,6 +83,21 @@ sudo systemctl restart ff-web-editor
 | `MAX_UPLOAD_MB` | `8192` | 视频上传上限 |
 | `AUTH_TOKEN` | 空 | 设置后网页提示输入口令；API 也接受 `x-auth-token` 请求头 |
 
+## 命令行 ffmpeg 工具（scripts/ffmpeg）
+
+从 `~/PowerShell` 仓库同步的独立 ffmpeg CLI 工具与知识文档（与 Web 编辑器互补，用于服务器/本地批处理）：
+
+| 工具 | 位置 | 说明 |
+|------|------|------|
+| `rip`（精准剪辑） | `scripts/ffmpeg/linux/cut.sh`（bash 函数） | 重编码帧级精确裁剪；`ffprobe` 自动选 libx264/libx265（CRF 23/28） |
+| 横屏转竖屏 | `scripts/ffmpeg/linux/h2v.sh` | `scale+crop`，偏移量 0.0~1.0 |
+| `rip`（Windows） | `scripts/ffmpeg/win/cut-function.ps1`、`win/ffmpeg.ps1` | 与 Linux 版同参数行为 |
+| `gblur`（区域高斯模糊） | `scripts/ffmpeg/win/ffmpeg.ps1` | 百分数坐标选区域，split+gblur+crop+overlay |
+| `h2v` / `split` | `scripts/ffmpeg/win/h2v.ps1` / `win/split.ps1` | 转竖屏 / 按时长分段 |
+| 旧版粗剪（封存） | `scripts/ffmpeg/archive/` | `-c copy` 流复制版，仅适合关键帧密集源 |
+
+关键知识文档：`docs/ffmpeg-cut.md`（裁剪方案与 `-ss`/`-to` 置于 `-i` 前的正确用法）、`docs/ffmpeg-keyframe.md`（GOP/关键帧对 `-c copy` 裁剪的影响）。
+
 ## 安全设计（限制选择本地文件）
 
 - 文件浏览/任务输入经 `fsResolve` 校验：路径必须位于 `FS_ROOTS` 白名单根目录内（realpath 解析，
