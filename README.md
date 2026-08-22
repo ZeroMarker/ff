@@ -101,9 +101,7 @@ sudo systemctl restart ff-web-editor
 ### Linux 本机部署
 
 ```bash
-mkdir -p ~/scripts
-cp scripts/ffmpeg/linux/cut.sh ~/scripts/ffmpeg.sh   # 提供 rip 函数
-echo 'source ~/scripts/ffmpeg.sh' >> ~/.bashrc
+bash deploy.sh   # 幂等: cut.sh -> ~/scripts/ffmpeg.sh，~/.bashrc 追加 source 行
 ```
 
 已部署于本机（`~/.bashrc` 第 180 行 source `~/scripts/ffmpeg.sh`，与仓库版字节一致），登录 shell 即可用 `rip <输入> <起> <止>`。
