@@ -98,6 +98,16 @@ sudo systemctl restart ff-web-editor
 
 关键知识文档：`docs/ffmpeg-cut.md`（裁剪方案与 `-ss`/`-to` 置于 `-i` 前的正确用法）、`docs/ffmpeg-keyframe.md`（GOP/关键帧对 `-c copy` 裁剪的影响）。
 
+### Linux 本机部署
+
+```bash
+mkdir -p ~/scripts
+cp scripts/ffmpeg/linux/cut.sh ~/scripts/ffmpeg.sh   # 提供 rip 函数
+echo 'source ~/scripts/ffmpeg.sh' >> ~/.bashrc
+```
+
+已部署于本机（`~/.bashrc` 第 180 行 source `~/scripts/ffmpeg.sh`，与仓库版字节一致），登录 shell 即可用 `rip <输入> <起> <止>`。
+
 ## 安全设计（限制选择本地文件）
 
 - 文件浏览/任务输入经 `fsResolve` 校验：路径必须位于 `FS_ROOTS` 白名单根目录内（realpath 解析，
