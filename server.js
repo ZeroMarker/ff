@@ -714,18 +714,6 @@ app.delete('/api/output-file', (req, res) => {
   } catch (e) { res.status(404).json({ error: e.message }); }
 });
 
-app.get('/api/output/:file', (req, res) => {
-  const fp = path.join(OUTPUT_DIR, decodeURIComponent(req.params.file));
-  if (!fs.existsSync(fp) || fp.includes('..')) return res.status(404).json({ error: 'file not found' });
-  res.download(fp, decodeURIComponent(req.params.file));
-});
-
-app.delete('/api/output/:file', (req, res) => {
-  const fp = path.join(OUTPUT_DIR, decodeURIComponent(req.params.file));
-  if (!fs.existsSync(fp)) return res.status(404).json({ error: 'file not found' });
-  fs.unlinkSync(fp);
-  res.json({ ok: true });
-});
 
 /* ---------- 优雅退出：终止 ffmpeg 子进程 ---------- */
 async function shutdown(signal) {

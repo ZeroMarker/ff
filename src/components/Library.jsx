@@ -121,11 +121,11 @@ export default function Library({ current, onSelect, config, reload, outputs, se
             <div key={o.url || o.name} className="out-item">
               <span className="nm" title={o.name}>{o.name}</span>
               <span className="sz">{fmtSize(o.size)}</span>
-              <a className="a" href={rel(o.url || `/api/output/${encodeURIComponent(o.name)}`)} download title="下载">⬇</a>
+              <a className="a" href={rel(o.url)} download title="下载">⬇</a>
               <button className="del" title="删除"
                 onClick={async () => {
                   try {
-                    await api(o.deleteUrl || `/api/output/${encodeURIComponent(o.name)}`, { method: 'DELETE' });
+                    await api(o.deleteUrl, { method: 'DELETE' });
                     reload();
                   } catch {}
                 }}>🗑</button>
