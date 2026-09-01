@@ -1,3 +1,6 @@
+# ncdu -o pp.json
+# rip "$(ncf ~/pp.json)" 01:00 02:00
+
 ncf() {
     local db="${1:-pp.json}"
     local selected
