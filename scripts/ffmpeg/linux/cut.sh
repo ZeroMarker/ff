@@ -37,7 +37,7 @@ function rip {
         return 1
     fi
 
-    local DIR NAME EXT START_CLEAN END_CLEAN OUTPUT CODEC VENC CRF rc RATE_LABEL
+    local DIR NAME EXT START_CLEAN END_CLEAN OUTPUT VENC CRF rc RATE_LABEL
     DIR=$(dirname "$INPUT_FILE")
     NAME=$(basename "$INPUT_FILE" | sed 's/\.[^.]*$//')
     EXT="${INPUT_FILE##*.}"
@@ -54,14 +54,9 @@ function rip {
         OUTPUT="${DIR}/${NAME}_cut_${START_CLEAN}-${END_CLEAN}${RATE_LABEL}.${EXT}"
     fi
 
-    # 检测原始视频编码，选择合适的编码器（与 win/cut-function.ps1 保持一致）
-    CODEC=$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$INPUT_FILE" 2>/dev/null)
-    case "$(echo "$CODEC" | tr 'A-Z' 'a-z')" in
-        h264)       VENC="libx264" ;;
-        hevc|h265)  VENC="libx265" ;;
-        *)          VENC="libx264" ;;
-    esac
-    if [ "$VENC" = "libx264" ]; then CRF=23; else CRF=28; fi
+    # 剪辑统一用 libx264：比 libx265 快 ~9 倍、帧级精确，无需保留源编码(含 HEVC)
+    VENC="libx264"
+    CRF=23
 
     # 指定目标码率(ABR)优先，否则退回 CRF 恒定画质
     local -a RATE=()
