@@ -1,5 +1,6 @@
 # ncdu -o pp.json
-# rip "$(ncf ~/pp.json)" 01:00 02:00
+# ncr ~/pp.json 01:00 02:00
+# ncr 01:00 02:00  # db 默认为 pp.json
 
 ncf() {
     local db="${1:-pp.json}"
@@ -41,4 +42,19 @@ ncf() {
     )" || return
 
     printf '%s\n' "$selected"
+}
+
+ncr() {
+    local db="pp.json"
+    if [[ -f "${1:-}" ]]; then
+        db="$1"
+        shift
+    fi
+    if [[ $# -lt 2 ]]; then
+        echo "用法: ncr [ncdu库] <开始> <结束> [码率]" >&2
+        return 1
+    fi
+    local selected
+    selected="$(ncf "$db")" || return
+    rip "$selected" "$@"
 }
