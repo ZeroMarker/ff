@@ -141,3 +141,101 @@ function h2v {
         ffmpeg -i $item.FullName -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:(in_w-1080)*${Offset}:(in_h-1920)/2" -c:a copy $outPath
     }
 }
+
+# MP4/MKV + SRT 字幕合并。
+# 用法:
+#   sub video.mp4 subtitle.srt
+#   sub video.mp4 subtitle.srt embed
+#   sub video.mp4 subtitle.srt output.mp4 embed
+function sub {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true, Position=0)]
+        [string]$InputFile,
+
+        [Parameter(Mandatory=$true, Position=1)]
+        [string]$SubtitleFile,
+
+        [Parameter(Position=2)]
+        [string]$OutputFile,
+
+        [Parameter(Position=3)]
+        [ValidateSet('burn', 'embed')]
+        [string]$Mode = 'burn'
+    )
+
+    # 第三个位置参数也可直接指定模式，此时自动生成输出文件名。
+    if ($OutputFile -in @('burn', 'embed')) {
+        if ($PSBoundParameters.ContainsKey('Mode')) {
+            Write-Error '模式不能同时作为第三和第四个参数传入'
+            return
+        }
+        $Mode = $OutputFile
+        $OutputFile = $null
+    }
+
+    if (-not (Test-Path -LiteralPath $InputFile -PathType Leaf)) {
+        Write-Error "视频文件不存在: $InputFile"
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $SubtitleFile -PathType Leaf)) {
+        Write-Error "字幕文件不存在: $SubtitleFile"
+        return
+    }
+
+    if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+        Write-Error 'ffmpeg 未安装或不在 PATH 中'
+        return
+    }
+
+    $inputItem = Get-Item -LiteralPath $InputFile
+    $subtitleItem = Get-Item -LiteralPath $SubtitleFile
+
+    if ([string]::IsNullOrWhiteSpace($OutputFile)) {
+        $OutputFile = Join-Path $inputItem.DirectoryName "$($inputItem.BaseName)_sub_${Mode}.mp4"
+    }
+
+    if ([System.IO.Path]::GetFullPath($inputItem.FullName) -eq [System.IO.Path]::GetFullPath($OutputFile)) {
+        Write-Error '输出文件不能与输入视频相同'
+        return
+    }
+
+    Write-Host "视频: $($inputItem.FullName)"
+    Write-Host "字幕: $($subtitleItem.FullName)"
+    Write-Host "模式: $Mode"
+    Write-Host "输出: $OutputFile"
+
+    if ($Mode -eq 'burn') {
+        # FFmpeg filtergraph 使用正斜杠路径，并要求转义盘符冒号和单引号。
+        $filterSubtitle = $subtitleItem.FullName.Replace('\', '/').Replace(':', '\:').Replace("'", "\'")
+        $argsList = @(
+            '-y', '-i', $inputItem.FullName,
+            '-vf', "subtitles=filename='$filterSubtitle'",
+            '-c:v', 'libx264', '-crf', '18', '-preset', 'medium',
+            '-c:a', 'copy',
+            $OutputFile
+        )
+    } else {
+        $argsList = @(
+            '-y', '-i', $inputItem.FullName, '-i', $subtitleItem.FullName,
+            '-map', '0:v', '-map', '0:a?', '-map', '1:0',
+            '-c:v', 'copy', '-c:a', 'copy', '-c:s', 'mov_text',
+            '-metadata:s:s:0', 'language=chi',
+            $OutputFile
+        )
+    }
+
+    & ffmpeg @argsList
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "ffmpeg 执行失败，退出码: $LASTEXITCODE"
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $OutputFile -PathType Leaf)) {
+        Write-Error "输出文件未生成: $OutputFile"
+        return
+    }
+
+    Write-Host "完成: $OutputFile"
+}
