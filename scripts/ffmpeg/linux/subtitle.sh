@@ -4,9 +4,9 @@
 # 两种用法：
 #   1) source 方式（可反复调用）:
 #        . scripts/ffmpeg/linux/subtitle.sh
-#        subtitle video.mp4 subtitle.srt
-#        subtitle video.mp4 subtitle.srt embed
-#        subtitle video.mp4 subtitle.srt output.mp4 embed
+#        sub video.mp4 subtitle.srt
+#        sub video.mp4 subtitle.srt embed
+#        sub video.mp4 subtitle.srt output.mp4 embed
 #   2) 直接执行:
 #        bash scripts/ffmpeg/linux/subtitle.sh video.mp4 subtitle.srt [burn|embed]
 #        bash scripts/ffmpeg/linux/subtitle.sh video.mp4 subtitle.srt [output.mp4] [burn|embed]
@@ -15,10 +15,10 @@
 #   burn  默认，将字幕烧录到画面中；播放器无法关闭字幕
 #   embed 将字幕封装为 MP4 字幕轨；播放器可以开关字幕
 
-function subtitle {
+function sub {
     if [ $# -lt 2 ] || [ $# -gt 4 ]; then
-        echo "用法: subtitle <视频.mp4> <字幕.srt> [burn|embed]" >&2
-        echo "      subtitle <视频.mp4> <字幕.srt> <输出.mp4> [burn|embed]" >&2
+        echo "用法: sub <视频.mp4> <字幕.srt> [burn|embed]" >&2
+        echo "      sub <视频.mp4> <字幕.srt> <输出.mp4> [burn|embed]" >&2
         return 1
     fi
 
@@ -119,6 +119,6 @@ function subtitle {
 
 # 直接执行模式（bash subtitle.sh ...）: 调用函数并透传退出码
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    subtitle "$@"
+    sub "$@"
     exit $?
 fi
