@@ -239,3 +239,94 @@ function sub {
 
     Write-Host "完成: $OutputFile"
 }
+
+# 横屏转竖屏：保持画面方向，缩放并裁剪，将 宽×高 转为 高×宽。
+# 用法: vert video.mp4 [-Offset 0.5] [-OutputFile output.mp4]
+function vert {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true, Position=0)]
+        [string]$InputFile,
+
+        [Parameter(Position=1)]
+        [double]$Offset = 0.5,
+
+        [Parameter(Position=2)]
+        [string]$OutputFile
+    )
+
+    if (-not (Test-Path -LiteralPath $InputFile -PathType Leaf)) {
+        Write-Error "视频文件不存在: $InputFile"
+        return
+    }
+
+    if ($Offset -lt 0 -or $Offset -gt 1) {
+        Write-Error '水平偏移必须是 0 到 1 之间的数字'
+        return
+    }
+
+    if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue) -or
+        -not (Get-Command ffprobe -ErrorAction SilentlyContinue)) {
+        Write-Error 'ffmpeg/ffprobe 未安装或不在 PATH 中'
+        return
+    }
+
+    $inputItem = Get-Item -LiteralPath $InputFile
+    $size = & ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 $inputItem.FullName
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$size)) {
+        Write-Error "无法读取视频分辨率: $InputFile"
+        return
+    }
+    $size = ([string]$size).Trim()
+    if ($size -notmatch '^(\d+)x(\d+)$') {
+        Write-Error "无法读取视频分辨率: $InputFile"
+        return
+    }
+
+    $width = [int]$Matches[1]
+    $height = [int]$Matches[2]
+    if ($width -le $height) {
+        Write-Error "输入视频不是横屏: ${width}x${height}"
+        return
+    }
+
+    $targetWidth = $height - ($height % 2)
+    $targetHeight = $width - ($width % 2)
+
+    if ([string]::IsNullOrWhiteSpace($OutputFile)) {
+        $OutputFile = Join-Path $inputItem.DirectoryName "$($inputItem.BaseName)_vert.mp4"
+    }
+
+    if ([System.IO.Path]::GetFullPath($inputItem.FullName) -eq [System.IO.Path]::GetFullPath($OutputFile)) {
+        Write-Error '输出文件不能与输入视频相同'
+        return
+    }
+
+    $offsetText = $Offset.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+    $filter = 'scale={0}:{1}:force_original_aspect_ratio=increase:force_divisible_by=2,crop={0}:{1}:(in_w-{0})*{2}:(in_h-{1})/2,setsar=1' -f $targetWidth, $targetHeight, $offsetText
+
+    Write-Host "视频: $($inputItem.FullName) (${width}x${height})"
+    Write-Host "输出: $OutputFile (${targetWidth}x${targetHeight})"
+    Write-Host "水平偏移: $offsetText"
+
+    $argsList = @(
+        '-y', '-i', $inputItem.FullName,
+        '-vf', $filter,
+        '-c:v', 'libx264', '-crf', '18', '-preset', 'medium',
+        '-c:a', 'aac',
+        $OutputFile
+    )
+    & ffmpeg @argsList
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "ffmpeg 执行失败，退出码: $LASTEXITCODE"
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $OutputFile -PathType Leaf)) {
+        Write-Error "输出文件未生成: $OutputFile"
+        return
+    }
+
+    Write-Host "完成: $OutputFile"
+}
