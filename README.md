@@ -89,8 +89,11 @@ sudo systemctl restart ff-web-editor
 
 | 工具 | 位置 | 说明 |
 |------|------|------|
-| `rip`（精准剪辑） | `scripts/ffmpeg/linux/cut.sh`（bash 函数） | 重编码帧级精确裁剪；`ffprobe` 自动选 libx264/libx265（CRF 23/28） |
-| 横屏转竖屏 | `scripts/ffmpeg/linux/h2v.sh` | `scale+crop`，偏移量 0.0~1.0 |
+| `rip`（精准剪辑） | `scripts/ffmpeg/linux/cut.sh`（bash 函数） | libx264 重编码，帧级精确裁剪 |
+| `h2v`（横屏转竖屏） | `scripts/ffmpeg/linux/h2v.sh`（bash 函数） | `scale+crop`，偏移量 0.0~1.0，输出到 `vertical/*_h2v.mp4` |
+| `sub`（添加字幕） | `scripts/ffmpeg/linux/subtitle.sh`（bash 函数） | 烧录字幕或嵌入可开关字幕轨 |
+| `vert`（旋转竖屏） | `scripts/ffmpeg/linux/vert.sh`（bash 函数） | 顺/逆时针旋转，不缩放、不裁剪 |
+| `ncf` / `ncr` | `scripts/fzf/fzf.sh`（bash 函数） | 从 ncdu 数据库选择文件，并可调用 `rip` 裁剪 |
 | `rip`（Windows） | `scripts/ffmpeg/win/cut-function.ps1`、`win/ffmpeg.ps1` | 与 Linux 版同参数行为 |
 | `gblur`（区域高斯模糊） | `scripts/ffmpeg/win/ffmpeg.ps1` | 百分数坐标选区域，split+gblur+crop+overlay |
 | `h2v` / `split` | `scripts/ffmpeg/win/h2v.ps1` / `win/split.ps1` | 转竖屏 / 按时长分段 |
@@ -101,10 +104,10 @@ sudo systemctl restart ff-web-editor
 ### Linux 本机部署
 
 ```bash
-bash deploy.sh   # 幂等: cut.sh -> ~/scripts/ffmpeg.sh，~/.bashrc 追加 source 行
+bash deploy.sh   # 幂等：校验脚本，并让 ~/.bashrc 直接加载仓库内的真实文件
 ```
 
-已部署于本机（`~/.bashrc` 第 180 行 source `~/scripts/ffmpeg.sh`，与仓库版字节一致），登录 shell 即可用 `rip <输入> <起> <止>`。
+部署过程不会复制脚本。登录 shell 会直接加载当前仓库中的 `cut.sh`、`h2v.sh`、`subtitle.sh`、`vert.sh` 和 `fzf.sh`，仓库更新后无需再次同步副本。
 
 ## 安全设计（限制选择本地文件）
 
