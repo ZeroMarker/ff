@@ -36,7 +36,7 @@ h2v() {
         echo "处理: $name (偏移: $offset)"
         ffmpeg -i "$f" \
             -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:(in_w-1080)*${offset}:(in_h-1920)/2" \
-            -c:a copy "vertical/${name%.mp4}_竖屏.mp4"
+            -c:a copy "vertical/${name%.mp4}_h2v.mp4"
         if [ "$?" -ne 0 ]; then
             rc=1
         fi
