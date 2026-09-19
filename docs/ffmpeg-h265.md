@@ -63,6 +63,5 @@ ffmpeg -y -ss <开始> -i <输入> -to <结束> -c copy -copyts <输出>
 | 文件 | 说明 |
 |------|------|
 | `scripts/ffmpeg/linux/cut.sh` | `rip` 函数；现统一 libx264（CRF 23） |
-| `deploy.sh` | 校验 shell 工具，并让 `~/.bashrc` 直接加载仓库内的真实脚本 |
 | `scripts/ffmpeg/archive/cut-rough.sh` | 封存的 `-c copy` 快速粗剪 |
 | `scripts/ffmpeg/win/cut-function.ps1` | Windows 版；仍为 HEVC→libx265（未同步） |

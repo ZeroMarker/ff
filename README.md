@@ -101,13 +101,34 @@ sudo systemctl restart ff-web-editor
 
 关键知识文档：`docs/ffmpeg-cut.md`（裁剪方案与 `-ss`/`-to` 置于 `-i` 前的正确用法）、`docs/ffmpeg-keyframe.md`（GOP/关键帧对 `-c copy` 裁剪的影响）。
 
-### Linux 本机部署
+### Linux 使用
+
+在当前 shell 临时加载：
 
 ```bash
-bash deploy.sh   # 幂等：校验脚本，并让 ~/.bashrc 直接加载仓库内的真实文件
+source "$HOME/ff/scripts/ffmpeg/linux/cut.sh"
+source "$HOME/ff/scripts/ffmpeg/linux/h2v.sh"
+source "$HOME/ff/scripts/ffmpeg/linux/subtitle.sh"
+source "$HOME/ff/scripts/ffmpeg/linux/vert.sh"
+source "$HOME/ff/scripts/fzf/fzf.sh"
 ```
 
-部署过程不会复制脚本。登录 shell 会直接加载当前仓库中的 `cut.sh`、`h2v.sh`、`subtitle.sh`、`vert.sh` 和 `fzf.sh`，仓库更新后无需再次同步副本。
+需要每次登录自动加载时，将下面内容加入 `~/.bashrc`：
+
+```bash
+for shell_functions in \
+  "$HOME/ff/scripts/ffmpeg/linux/cut.sh" \
+  "$HOME/ff/scripts/ffmpeg/linux/h2v.sh" \
+  "$HOME/ff/scripts/ffmpeg/linux/subtitle.sh" \
+  "$HOME/ff/scripts/ffmpeg/linux/vert.sh" \
+  "$HOME/ff/scripts/fzf/fzf.sh"
+do
+  [[ -r "$shell_functions" ]] && source "$shell_functions"
+done
+unset shell_functions
+```
+
+运行 `source ~/.bashrc` 使其在当前 shell 生效。以上方式直接加载仓库内的真实脚本，不创建或同步副本。
 
 ## 安全设计（限制选择本地文件）
 
