@@ -5,8 +5,10 @@
 #   1) source 方式（可反复调用）:
 #        . scripts/ffmpeg/linux/subtitle.sh
 #        subtitle video.mp4 subtitle.srt
+#        subtitle video.mp4 subtitle.srt embed
 #        subtitle video.mp4 subtitle.srt output.mp4 embed
 #   2) 直接执行:
+#        bash scripts/ffmpeg/linux/subtitle.sh video.mp4 subtitle.srt [burn|embed]
 #        bash scripts/ffmpeg/linux/subtitle.sh video.mp4 subtitle.srt [output.mp4] [burn|embed]
 #
 # 模式：
@@ -15,15 +17,26 @@
 
 function subtitle {
     if [ $# -lt 2 ] || [ $# -gt 4 ]; then
-        echo "用法: subtitle <视频.mp4> <字幕.srt> [输出.mp4] [burn|embed]" >&2
+        echo "用法: subtitle <视频.mp4> <字幕.srt> [burn|embed]" >&2
+        echo "      subtitle <视频.mp4> <字幕.srt> <输出.mp4> [burn|embed]" >&2
         return 1
     fi
 
     local INPUT_FILE="$1"
     local SUBTITLE_FILE="$2"
-    local OUTPUT_FILE="${3:-}"
-    local MODE="${4:-burn}"
+    local OUTPUT_FILE=""
+    local MODE="burn"
     local DIR NAME
+
+    if [ $# -ge 3 ]; then
+        case "$3" in
+            burn|embed) MODE="$3" ;;
+            *)
+                OUTPUT_FILE="$3"
+                MODE="${4:-burn}"
+                ;;
+        esac
+    fi
 
     if [ ! -f "$INPUT_FILE" ]; then
         echo "错误: 视频文件不存在: $INPUT_FILE" >&2
@@ -53,9 +66,9 @@ function subtitle {
         NAME=$(basename "$INPUT_FILE")
         NAME="${NAME%.*}"
         if [ "$DIR" = "." ]; then
-            OUTPUT_FILE="${NAME}_subtitled.mp4"
+            OUTPUT_FILE="${NAME}_sub_${MODE}.mp4"
         else
-            OUTPUT_FILE="${DIR}/${NAME}_subtitled.mp4"
+            OUTPUT_FILE="${DIR}/${NAME}_sub_${MODE}.mp4"
         fi
     fi
 
