@@ -22,9 +22,9 @@
 #   burn  默认，将字幕烧录到画面中；播放器无法关闭字幕（重编码，用 crf 控制体积）
 #   embed 将字幕封装为 MP4 字幕轨；播放器可以开关字幕（视频流复制，crf 无效）
 #
-# crf（burn 专用，默认 23）：x264 恒定画质，取值 0~51，越小越清晰、文件越大。
-#   已压过的源（低码率/高 crf 编码过、含噪声）仍可能膨胀，此时可用
-#   crf 26~30 进一步接近源体积。显式指定 crf 时输出名追加 _crfNN，
+# crf（burn 专用，默认 18）：x264 恒定画质，取值 0~51，越小越清晰、文件越大。
+#   已压过的源（低码率/高 crf 编码过、含噪声）在 crf 18 下体积可能膨胀数倍，
+#   此时调大 crf（如 23~28）可接近源体积。explicit 指定 crf 时输出名追加 _crfNN，
 #   避免与默认 crf 的同名产物互相覆盖。
 #
 # 路径含 ':' 的文件名（如 "a:b.mp4"）会先转成绝对路径：
@@ -79,7 +79,7 @@ function sub {
     local INPUT_FILE SUBTITLE_FILE
     local OUTPUT_FILE=""
     local MODE="burn"
-    local CRF="23"
+    local CRF="18"
     local CRF_GIVEN=0
     local DIR NAME
     local arg
@@ -250,14 +250,13 @@ function sub {
             esac
         done
 
-        # 不从 stdin 接收 q：FFmpeg 收到 q 会以 0 退出，容易把截断文件误报为完成。
-        ffmpeg -nostdin -y -i "$ABS_INPUT" \
+        ffmpeg -y -i "$ABS_INPUT" \
                -vf "subtitles=filename=$FILTER_SUBTITLE" \
                -c:v libx264 -crf "$CRF" -preset medium -c:a copy \
                "$ABS_OUTPUT"
         rc=$?
     else
-        ffmpeg -nostdin -y -i "$ABS_INPUT" -i "$ABS_SUB" \
+        ffmpeg -y -i "$ABS_INPUT" -i "$ABS_SUB" \
                -map 0:v -map '0:a?' -map 1:0 \
                -c:v copy -c:a copy -c:s mov_text \
                -metadata:s:s:0 language=chi \

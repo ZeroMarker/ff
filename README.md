@@ -91,7 +91,7 @@ sudo systemctl restart ff-web-editor
 |------|------|------|
 | `rip`（精准剪辑） | `scripts/ffmpeg/linux/cut.sh`（bash 函数） | libx264 重编码，帧级精确裁剪 |
 | `h2v`（横屏转竖屏） | `scripts/ffmpeg/linux/h2v.sh`（bash 函数） | `h2v [偏移量] [文件…]`：`scale+crop`，偏移量 0.0~1.0（默认 0.5）；无文件时扫当前目录 `*.mp4` 输出到 `vertical/*_h2v.mp4`，指定文件时输出到源文件同目录 |
-| `sub`（添加字幕） | `scripts/ffmpeg/linux/subtitle.sh`（bash 函数） | `sub <视频> <字幕> [输出.mp4] [burn\|embed] [crf]`：前两个参数**顺序可颠倒**（按扩展名/ffprobe 自动识别）；第 3 个起按内容识别（`burn\|embed`=模式、纯整数=crf、其它=输出名）；burn 烧录进画面（默认，重编码），embed 封装为可开关字幕轨（流复制）；`crf` 默认 23，仅 burn 生效，越小越清晰/越大 |
+| `sub`（添加字幕） | `scripts/ffmpeg/linux/subtitle.sh`（bash 函数） | `sub <视频> <字幕> [输出.mp4] [burn\|embed] [crf]`：前两个参数**顺序可颠倒**（按扩展名/ffprobe 自动识别）；第 3 个起按内容识别（`burn\|embed`=模式、纯整数=crf、其它=输出名）；burn 烧录进画面（默认，重编码），embed 封装为可开关字幕轨（流复制）；`crf` 默认 18，仅 burn 生效，越小越清晰/越大 |
 | `vert`（旋转竖屏） | `scripts/ffmpeg/linux/vert.sh`（bash 函数） | 顺/逆时针旋转，不缩放、不裁剪 |
 | `pick` / `f`（通用选择器） | `scripts/fzf/fzf.sh`（bash 函数） | 候选源任意（`ls` / `find` / `git ls-files` / ncdu…）：`<候选列表> \| pick` 交互选择，`<候选列表> \| f <命令> [参数…]` 选中后执行，`{}` 替换为选中项；TAB 可多选、逐条执行；取消时不执行 |
 | `_ncdu_paths` / `_ncdu_dirs` / `ncf` / `fn` / `fcd` / `ncr` | `scripts/fzf/fzf.sh`（bash 函数） | ncdu 层（只做 JSON→路径列表）：`_ncdu_paths [库]` 列文件，`_ncdu_dirs [库]` 列目录，`ncf [库]` 选择，`fn [库] <命令> [参数…]` = ncdu 绑定的 `f`，`fcd [库]` = 选目录并 `cd`，`ncr [库] <起> <止> [码率]` = `fn rip {} …` |
@@ -202,11 +202,11 @@ f sub {} {} burn 23 <<< "$(ls *.mp4 *.srt)"      # 追加 crf=23（省体积）
 f sub {} {} <<< "$(ls a.mp4 a.srt b.mp4 b.srt)"
 ```
 
-**`sub` 的 crf**（burn 专用，默认 23）：crf 越小越清晰、文件越大，重编码耗时也略增。720p30/12s、`-preset medium` 实测，每格为「输出体积 / 重编码 CPU 秒」：
+**`sub` 的 crf**（burn 专用，默认 18）：crf 越小越清晰、文件越大，重编码耗时也略增。720p30/12s、`-preset medium` 实测，每格为「输出体积 / 重编码 CPU 秒」：
 
 | crf | 母带源(crf18) | 已压过源(crf31) | 含噪声源(crf30) |
 |---|---|---|---|
-| 18 | 6950K / 15.5s | 3658K / 13.8s | 15382K / 44.8s |
+| 18（默认） | 6950K / 15.5s | 3658K / 13.8s | 15382K / 44.8s |
 | 20 | 6000K / 15.1s | 3122K / 13.3s | 12030K / 42.8s |
 | 22 | 4968K / 14.4s | 2680K / 12.7s | 9439K / 39.7s |
 | 24 | 4006K / 13.9s | 2324K / 12.4s | 7461K / 36.2s |
@@ -216,7 +216,7 @@ f sub {} {} <<< "$(ls a.mp4 a.srt b.mp4 b.srt)"
 - **体积**：每 +2 crf ≈ ×0.78~0.86（-14%~-22%），18→28 约为原来的 **1/4~1/5**。
 - **速度**：18→28 只省 **15%~34%** CPU 时间（源越难压收益越大），`-preset medium` 下不是数量级差异；体积换来的是画质而非时间。
 - **相对源**：母带源 crf18≈1.0x、crf28≈0.3x；已压过源仍会膨胀（18=2.5x → 28=1.2x）；噪声源最难压（18=3.9x → 28=1.2x）。
-- **取值**：默认 23 优先兼顾画质与体积；源压得很狠时用 26~28，要尽量接近源码率可试 28~30；18 只适合当作要长期保存的中间产物。
+- **取值**：想基本无感且接近源体积用 23（≈ -1/3）；源压得很狠时用 26~28；18 只适合当作要长期保存的中间产物。
 
 显式给 crf 时输出名会带 `_crfNN`（如 `src_sub_burn_crf23.mp4`），不会和默认产物互相覆盖；`embed` 是流复制，此时会提示 `crf 不生效`。
 
