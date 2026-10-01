@@ -23,6 +23,10 @@ bash scripts/ffmpeg/linux/cut.sh PRIAN-050.mp4 01:39:26 01:40:10
 bash scripts/ffmpeg/linux/cut.sh PRIAN-050.mp4 01:39:26 01:40:10 2M
 ```
 
+### 入参校验
+
+Linux 和 Windows 的 `rip` 会先用 `ffprobe` 读取当前素材时长，要求 `0 ≤ 开始时间 < 结束时间 ≤ 素材时长`。时间支持非负秒数、`MM:SS`、`HH:MM:SS`，均可带小数秒；冒号后的分、秒须小于 60。格式错误、起止倒置、越界或无法读取有效时长时，报错并停止，不启动编码。Windows 另外保留开始参数 `start` 和结束参数 `end`。
+
 ### 实际执行
 
 ```bash
@@ -61,8 +65,7 @@ ffmpeg -y -ss 01:39:26 -to 01:40:10 -i PRIAN-050.mp4 \
 
 ```powershell
 rip .\PRIAN-050_cut_013926-014010.mp4 00:00:02 00:00:44
-# 或直接用原始时间:
-rip .\PRIAN-050_cut_013926-014010.mp4 01:39:26 01:40:10
+# 须使用当前片段内的相对时间；原素材时间码超出片段时长会被拒绝。
 ```
 
 行为与 `linux/cut.sh` 一致（重编码、`-ss`/`-to` 前置、帧级精确）。

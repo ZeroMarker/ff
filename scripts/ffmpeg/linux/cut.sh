@@ -16,9 +16,9 @@
 #       Windows 对应实现: scripts/ffmpeg/win/cut-function.ps1
 
 function rip {
-    local INPUT_FILE="$1"
-    local START_TIME="$2"
-    local END_TIME="$3"
+    local INPUT_FILE="${1:-}"
+    local START_TIME="${2:-}"
+    local END_TIME="${3:-}"
     local BITRATE="${4:-}"   # 可选: 目标视频码率，如 2M / 2000k
 
     if [ $# -lt 3 ]; then
@@ -36,6 +36,54 @@ function rip {
         echo "错误: ffmpeg 未安装或不在 PATH 中" >&2
         return 1
     fi
+
+    if ! command -v ffprobe &> /dev/null; then
+        echo "错误: ffprobe 未安装或不在 PATH 中" >&2
+        return 1
+    fi
+
+    # 按素材自身的时长校验，不能用原视频的时间码裁剪已剪出的片段。
+    local DURATION TIME_SECONDS START_SECONDS END_SECONDS
+    if ! DURATION=$(ffprobe -v error -show_entries format=duration \
+        -of default=noprint_wrappers=1:nokey=1 "$INPUT_FILE"); then
+        echo "错误: 无法读取素材时长: $INPUT_FILE" >&2
+        return 1
+    fi
+    if ! TIME_SECONDS=$(LC_ALL=C RIP_START="$START_TIME" RIP_END="$END_TIME" RIP_DURATION="$DURATION" awk '
+        function seconds(value, parts, count, i, result) {
+            count = split(value, parts, ":")
+            if (count < 1 || count > 3) return -1
+            for (i = 1; i < count; i++)
+                if (parts[i] !~ /^[0-9]+$/) return -1
+            if (parts[count] !~ /^[0-9]+(\.[0-9]+)?$/) return -1
+            result = 0
+            for (i = 1; i <= count; i++) {
+                if (count > 1 && i > 1 && parts[i] + 0 >= 60) return -1
+                result = result * 60 + parts[i]
+            }
+            return result
+        }
+        BEGIN {
+            start = ENVIRON["RIP_START"]; end = ENVIRON["RIP_END"]; duration = ENVIRON["RIP_DURATION"]
+            if (duration !~ /^[0-9]+(\.[0-9]+)?$/ || duration + 0 <= 0) {
+                print "错误: 无法读取有效的素材时长" > "/dev/stderr"; exit 1
+            }
+            s = seconds(start); e = seconds(end)
+            if (s < 0 || e < 0) {
+                print "错误: 时间须为非负秒数、MM:SS 或 HH:MM:SS（支持小数秒）" > "/dev/stderr"; exit 1
+            }
+            if (s >= e) {
+                print "错误: 开始时间必须小于结束时间" > "/dev/stderr"; exit 1
+            }
+            if (s >= duration || e > duration) {
+                printf "错误: 时间范围超出素材时长（%s 秒），须满足 0 ≤ 开始 < 结束 ≤ 时长\n", duration > "/dev/stderr"; exit 1
+            }
+            printf "%.9f %.9f\n", s, e
+        }
+    '); then
+        return 1
+    fi
+    read -r START_SECONDS END_SECONDS <<< "$TIME_SECONDS"
 
     local DIR NAME EXT START_CLEAN END_CLEAN OUTPUT VENC CRF rc RATE_LABEL
     DIR=$(dirname "$INPUT_FILE")
@@ -75,7 +123,7 @@ function rip {
     # 注意: -ss 与 -to 都是输入选项，必须放在 -i 之前，按原始时间戳计算终点。
     #       若把 -to 放在 -i 之后（输出选项），`-ss` 输入定位会平移输出时间戳，
     #       终点按平移后的位置计算，实际产出 [start, start+end]（终点翻倍）。
-    ffmpeg -y -ss "$START_TIME" -to "$END_TIME" -i "$INPUT_FILE" \
+    ffmpeg -y -ss "$START_SECONDS" -to "$END_SECONDS" -i "$INPUT_FILE" \
            -c:v "$VENC" "${RATE[@]}" -preset fast -c:a aac "$OUTPUT"
     rc=$?
     if [ $rc -ne 0 ]; then
