@@ -52,8 +52,16 @@ const VideoStage = forwardRef(function VideoStage(props, ref) {
   useEffect(() => {
     const p = playerRef.current;
     if (!p || !videoUrl) return;
-    // 让浏览器依据响应的 Content-Type 选择解码器；文件浏览器支持的不只有 MP4。
-    p.src({ src: videoUrl });
+    // The API endpoint has no extension, so Video.js needs an explicit MIME
+    // type before it will pass the source to the browser.
+    const path = new URL(videoUrl, window.location.href).searchParams.get('path') || '';
+    const ext = path.split('.').pop().toLowerCase();
+    const types = {
+      mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm',
+      mov: 'video/quicktime', mkv: 'video/x-matroska', avi: 'video/x-msvideo',
+      flv: 'video/x-flv', ts: 'video/mp2t', mpeg: 'video/mpeg', wmv: 'video/x-ms-wmv',
+    };
+    p.src({ src: videoUrl, type: types[ext] || 'video/mp4' });
     p.currentTime(0);
     setReady(false);
     lastTimeRef.current = 0;
@@ -67,7 +75,7 @@ const VideoStage = forwardRef(function VideoStage(props, ref) {
       const p = playerRef.current;
       if (p && !p.paused() && playheadRef.current && duration > 0) {
         const t = p.currentTime();
-        playheadRef.current.style.transform = `translateX(${(t / duration) * 100}%)`;
+        playheadRef.current.style.left = `${Math.min(100, Math.max(0, (t / duration) * 100))}%`;
         if (Math.abs(t - lastTimeRef.current) > 0.05) { lastTimeRef.current = t; onTimeRef.current(t); }
       }
       rafRef.current = requestAnimationFrame(tick);
@@ -192,7 +200,7 @@ const VideoStage = forwardRef(function VideoStage(props, ref) {
             width: `${Math.max(0, ((safeTrimEnd - safeTrimStart) / rangeMax) * 100)}%`,
           }} />
           <div className="tl-playhead" ref={playheadRef}
-            style={{ transform: `translateX(${(curTime / rangeMax) * 100}%)` }} />
+            style={{ left: `${Math.min(100, Math.max(0, (curTime / rangeMax) * 100))}%`, transform: 'translateX(-50%)' }} />
         </div>
         <div className="tl-row tl-tools">
           <button className="btn small" onClick={addSegment} disabled={!meta}>＋ 添加到片段列表</button>

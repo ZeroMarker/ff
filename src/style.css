@@ -151,7 +151,7 @@ input[type=range] { accent-color: var(--accent); }
 .tl-time { font-family: var(--mono); font-size: 12px; width: 96px; text-align: right; }
 .tl-bar { position: relative; height: 26px; background: var(--bg3); border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
 .tl-fill { position: absolute; top: 0; bottom: 0; background: linear-gradient(90deg, rgba(45,212,191,.55), rgba(129,140,248,.55)); }
-.tl-playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; box-shadow: 0 0 6px rgba(255,255,255,.8); transition: transform .05s linear; }
+.tl-playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; box-shadow: 0 0 6px rgba(255,255,255,.8); transition: left .05s linear; }
 .tl-tools { gap: 6px; flex-wrap: wrap; }
 .tl-tools .spacer { flex: 1; }
 

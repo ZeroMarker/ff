@@ -38,7 +38,7 @@ export default function FabricDrawModal({ videoEl, meta, curTime, onClose, onPub
     if (!canvasEl.current) return;
     const fc = new fabric.Canvas(canvasEl.current, {
       width: cw, height: ch, backgroundColor: '#000',
-      selection: true, preserveObjectStacking: true,
+      selection: false, isDrawingMode: true, preserveObjectStacking: true,
     });
     fabricCanvas.current = fc;
     fc.freeDrawingBrush = new fabric.PencilBrush(fc);
@@ -69,10 +69,11 @@ export default function FabricDrawModal({ videoEl, meta, curTime, onClose, onPub
 
   const applyTool = (t) => {
     setTool(t);
-    fc = fabricCanvas.current;
+    const fc = fabricCanvas.current;
     if (!fc) return;
     fc.isDrawingMode = t === 'brush' || t === 'eraser';
     fc.selection = t === 'select';
+    fc.skipTargetFind = t !== 'select';
     if (t === 'brush') fc.freeDrawingBrush = new fabric.PencilBrush(fc);
     else if (t === 'eraser') fc.freeDrawingBrush = new EraserBrush(fc);
     fc.freeDrawingBrush.color = t === 'eraser' ? '#000000' : color;
@@ -88,38 +89,50 @@ export default function FabricDrawModal({ videoEl, meta, curTime, onClose, onPub
     fc.freeDrawingBrush.width = size;
   }, [color, size, tool]);
 
-  let fc; // current fabric canvas ref（事件处理闭包内使用）
-  const startShape = () => {
+  useEffect(() => {
     const c = fabricCanvas.current;
-    if (!c) return;
-    const pos = c.getPointer(c.upperCanvasEl);
-    let obj = null;
-    const move = (e) => {
-      const p = c.getPointer(c.upperCanvasEl);
-      if (!obj) return;
-      if (tool === 'rect') obj.set({ width: p.x - pos.x, height: p.y - pos.y });
-      else if (tool === 'circle') obj.set({ rx: Math.abs(p.x - pos.x), ry: Math.abs(p.y - pos.y) });
-      else if (tool === 'line') obj.set({ x2: p.x, y2: p.y });
-      c.renderAll();
+    if (!c || !['rect', 'circle', 'line'].includes(tool)) return;
+    let origin = null;
+    let shape = null;
+    const down = ({ e }) => {
+      origin = c.getPointer(e);
+      const options = { left: origin.x, top: origin.y, fill: 'rgba(255,68,68,0.35)', stroke: color, strokeWidth: 2, selectable: false, evented: false };
+      if (tool === 'rect') shape = new fabric.Rect({ ...options, width: 1, height: 1 });
+      else if (tool === 'circle') shape = new fabric.Ellipse({ ...options, rx: 1, ry: 1 });
+      else shape = new fabric.Line([origin.x, origin.y, origin.x, origin.y], { stroke: color, strokeWidth: size, strokeLineCap: 'round', selectable: false, evented: false });
+      c.add(shape);
+    };
+    const move = ({ e }) => {
+      if (!shape || !origin) return;
+      const point = c.getPointer(e);
+      if (tool === 'line') shape.set({ x2: point.x, y2: point.y });
+      else {
+        const width = Math.abs(point.x - origin.x);
+        const height = Math.abs(point.y - origin.y);
+        shape.set({ left: Math.min(origin.x, point.x), top: Math.min(origin.y, point.y) });
+        if (tool === 'rect') shape.set({ width, height });
+        else shape.set({ rx: width / 2, ry: height / 2 });
+      }
+      c.requestRenderAll();
     };
     const up = () => {
+      if (shape) {
+        shape.set({ selectable: true, evented: true });
+        shape.setCoords();
+      }
+      origin = null;
+      shape = null;
+    };
+    c.on('mouse:down', down);
+    c.on('mouse:move', move);
+    c.on('mouse:up', up);
+    return () => {
+      up();
+      c.off('mouse:down', down);
       c.off('mouse:move', move);
       c.off('mouse:up', up);
     };
-    if (tool === 'rect') { obj = new fabric.Rect({ left: pos.x, top: pos.y, width: 1, height: 1, fill: 'rgba(255,68,68,0.35)', stroke: color, strokeWidth: 2 }); }
-    else if (tool === 'circle') { obj = new fabric.Ellipse({ left: pos.x, top: pos.y, rx: 1, ry: 1, fill: 'rgba(255,68,68,0.35)', stroke: color, strokeWidth: 2 }); }
-    else if (tool === 'line') { obj = new fabric.Line([pos.x, pos.y, pos.x, pos.y], { stroke: color, strokeWidth: size, strokeLineCap: 'round' }); }
-    if (obj) c.add(obj).setActiveObject(obj);
-    c.on('mouse:move', move);
-    c.on('mouse:up', up);
-  };
-
-  const onMouseDown = () => {
-    if (tool === 'rect' || tool === 'circle' || tool === 'line') startShape();
-  };
-  const onMouseUp = () => {
-    if (tool === 'rect' || tool === 'circle' || tool === 'line') { /* kept */ }
-  };
+  }, [tool, color, size]);
 
   const undo = () => {
     const c = fabricCanvas.current;
@@ -165,7 +178,7 @@ export default function FabricDrawModal({ videoEl, meta, curTime, onClose, onPub
           <button className="btn primary small" onClick={publish}>发布为叠加层 ➔</button>
         </div>
         <div className="paint-canvas-wrap">
-          <canvas ref={canvasEl} onMouseDown={onMouseDown} onMouseUp={onMouseUp} />
+          <canvas ref={canvasEl} />
         </div>
         <p className="dim center" style={{ fontSize: 11.5, margin: '6px 0 0' }}>
           在当前帧上自由绘制/标注，发布后成为可拖动的叠加图片层（由 ffmpeg 合成进视频）
