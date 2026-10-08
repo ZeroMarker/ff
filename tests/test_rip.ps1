@@ -34,6 +34,18 @@ try {
             if ([math]::Abs($duration - $expected) -gt 0.01) { throw "Wrong output duration: $durationText" }
             Remove-Item -LiteralPath $output.FullName
         }
+        foreach ($extension in @('mkv', 'mov')) {
+            $source = "sample video.$extension"
+            & ffmpeg -y -v error -i 'sample video.mp4' -c copy $source
+            if ($LASTEXITCODE -ne 0) { throw 'Non-MP4 fixture generation failed' }
+            rip $source 0 1
+            if ($LASTEXITCODE -ne 0) { throw "Non-MP4 input failed: $script $extension" }
+            $output = Get-ChildItem '*_cut_*'
+            if ($output.Count -ne 1 -or $output.Name -ne 'sample video_cut_0-1.mp4') { throw 'Expected exactly one MP4 output' }
+            $formatName = & ffprobe -v error -show_entries format=format_name -of default=noprint_wrappers=1:nokey=1 $output.FullName
+            if ($LASTEXITCODE -ne 0 -or 'mp4' -notin $formatName.Split(',')) { throw 'Output is not an MP4 container' }
+            Remove-Item -LiteralPath $output.FullName
+        }
         Set-Content 'bad.mp4' 'not a video'
         $rejected = $false
         try { rip 'bad.mp4' 0 1 } catch { $rejected = $true }

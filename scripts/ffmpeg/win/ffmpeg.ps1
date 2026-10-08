@@ -64,7 +64,7 @@ function rip {
     # 文件名中用 start/end 替代时间码
     $ssLabel = if ($StartTime -eq 'start') { 'start' } else { $StartTime.Replace(':', '') }
     $toLabel = if ($EndTime -eq 'end') { 'end' } else { $EndTime.Replace(':', '') }
-    $outputName = "$([System.IO.Path]::GetFileNameWithoutExtension($InputFile))_cut_${ssLabel}-${toLabel}$([System.IO.Path]::GetExtension($InputFile))"
+    $outputName = "$([System.IO.Path]::GetFileNameWithoutExtension($InputFile))_cut_${ssLabel}-${toLabel}.mp4"
     # 检测原始视频编码，选择合适的编码器
     $codec = & ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 $InputFile
     $venc = switch ($codec) {

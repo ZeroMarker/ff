@@ -85,10 +85,9 @@ function rip {
     fi
     read -r START_SECONDS END_SECONDS <<< "$TIME_SECONDS"
 
-    local DIR NAME EXT START_CLEAN END_CLEAN OUTPUT VENC CRF rc RATE_LABEL
+    local DIR NAME START_CLEAN END_CLEAN OUTPUT VENC CRF rc RATE_LABEL
     DIR=$(dirname "$INPUT_FILE")
     NAME=$(basename "$INPUT_FILE" | sed 's/\.[^.]*$//')
-    EXT="${INPUT_FILE##*.}"
     START_CLEAN=$(echo "$START_TIME" | tr -d ':')
     END_CLEAN=$(echo "$END_TIME" | tr -d ':')
 
@@ -97,9 +96,9 @@ function rip {
     if [ -n "$BITRATE" ]; then RATE_LABEL="_${BITRATE}"; fi
 
     if [ "$DIR" = "." ]; then
-        OUTPUT="${NAME}_cut_${START_CLEAN}-${END_CLEAN}${RATE_LABEL}.${EXT}"
+        OUTPUT="${NAME}_cut_${START_CLEAN}-${END_CLEAN}${RATE_LABEL}.mp4"
     else
-        OUTPUT="${DIR}/${NAME}_cut_${START_CLEAN}-${END_CLEAN}${RATE_LABEL}.${EXT}"
+        OUTPUT="${DIR}/${NAME}_cut_${START_CLEAN}-${END_CLEAN}${RATE_LABEL}.mp4"
     fi
 
     # 剪辑统一用 libx264：比 libx265 快 ~9 倍、帧级精确，无需保留源编码(含 HEVC)

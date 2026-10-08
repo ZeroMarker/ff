@@ -25,6 +25,8 @@ bash scripts/ffmpeg/linux/cut.sh PRIAN-050.mp4 01:39:26 01:40:10 2M
 
 ### 入参校验
 
+Linux 和 Windows 的 `rip` 均统一输出 `.mp4`，不再沿用输入文件的扩展名；视频与音频编码参数保持不变。
+
 Linux 和 Windows 的 `rip` 会先用 `ffprobe` 读取当前素材时长，要求 `0 ≤ 开始时间 < 结束时间 ≤ 素材时长`。时间支持非负秒数、`MM:SS`、`HH:MM:SS`，均可带小数秒；冒号后的分、秒须小于 60。格式错误、起止倒置、越界或无法读取有效时长时，报错并停止，不启动编码。Windows 另外保留开始参数 `start` 和结束参数 `end`。
 
 ### 实际执行

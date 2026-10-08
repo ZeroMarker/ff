@@ -51,6 +51,25 @@ class RipTimeValidation(unittest.TestCase):
                 ], text=True)
                 self.assertAlmostEqual(float(duration), 2 if start == '0' else 1, places=2)
 
+    def test_non_mp4_inputs_produce_mp4(self):
+        for extension in ('mkv', 'mov'):
+            with self.subTest(extension=extension):
+                source = self.directory / f'sample video.{extension}'
+                subprocess.run([
+                    'ffmpeg', '-v', 'error', '-i', str(self.source),
+                    '-c', 'copy', str(source),
+                ], check=True)
+                result = self.rip('0', '1', source=source)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                output = self.directory / 'sample video_cut_0-1.mp4'
+                self.assertEqual(list(self.directory.glob('*_cut_*')), [output])
+                format_name = subprocess.check_output([
+                    'ffprobe', '-v', 'error', '-show_entries', 'format=format_name',
+                    '-of', 'default=noprint_wrappers=1:nokey=1', str(output),
+                ], text=True).strip()
+                self.assertIn('mp4', format_name.split(','))
+                output.unlink()
+
     def test_unreadable_media_is_rejected(self):
         bad = self.directory / 'bad.mp4'
         bad.write_text('not a video')
