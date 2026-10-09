@@ -61,9 +61,16 @@ function rip {
         return
     }
 
-    # 文件名中用 start/end 替代时间码
-    $ssLabel = if ($StartTime -eq 'start') { 'start' } else { $StartTime.Replace(':', '') }
-    $toLabel = if ($EndTime -eq 'end') { 'end' } else { $EndTime.Replace(':', '') }
+    # 数字时间统一为 HHMMSS[.小数秒]；保留 start/end 别名。
+    $timeLabel = {
+        param([string]$Value, [double]$Seconds)
+        $whole = [math]::Floor($Seconds)
+        $fraction = if ($Value.Contains('.')) { $Value.Split('.')[-1].TrimEnd([char]'0') } else { '' }
+        if ($fraction) { $fraction = ".$fraction" }
+        return ('{0:00}{1:00}{2:00}{3}' -f [math]::Floor($whole / 3600), ([math]::Floor($whole / 60) % 60), ($whole % 60), $fraction)
+    }
+    $ssLabel = if ($StartTime -eq 'start') { 'start' } else { & $timeLabel $StartTime $startSeconds }
+    $toLabel = if ($EndTime -eq 'end') { 'end' } else { & $timeLabel $EndTime $endSeconds }
     $outputName = "$([System.IO.Path]::GetFileNameWithoutExtension($InputFile))_cut_${ssLabel}-${toLabel}.mp4"
     # 检测原始视频编码，选择合适的编码器
     $codec = & ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 $InputFile

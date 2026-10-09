@@ -43,7 +43,7 @@ function rip {
     fi
 
     # 按素材自身的时长校验，不能用原视频的时间码裁剪已剪出的片段。
-    local DURATION TIME_SECONDS START_SECONDS END_SECONDS
+    local DURATION TIME_SECONDS START_SECONDS END_SECONDS START_CLEAN END_CLEAN
     if ! DURATION=$(ffprobe -v error -show_entries format=duration \
         -of default=noprint_wrappers=1:nokey=1 "$INPUT_FILE"); then
         echo "错误: 无法读取素材时长: $INPUT_FILE" >&2
@@ -63,6 +63,15 @@ function rip {
             }
             return result
         }
+        function label(value, total, whole, fraction) {
+            whole = int(total)
+            fraction = value
+            if (sub(/^[^.]*\./, "", fraction)) {
+                sub(/0+$/, "", fraction)
+                if (fraction != "") fraction = "." fraction
+            } else fraction = ""
+            return sprintf("%02d%02d%02d%s", int(whole / 3600), int(whole / 60) % 60, whole % 60, fraction)
+        }
         BEGIN {
             start = ENVIRON["RIP_START"]; end = ENVIRON["RIP_END"]; duration = ENVIRON["RIP_DURATION"]
             if (duration !~ /^[0-9]+(\.[0-9]+)?$/ || duration + 0 <= 0) {
@@ -78,18 +87,16 @@ function rip {
             if (s >= duration || e > duration) {
                 printf "错误: 时间范围超出素材时长（%s 秒），须满足 0 ≤ 开始 < 结束 ≤ 时长\n", duration > "/dev/stderr"; exit 1
             }
-            printf "%.9f %.9f\n", s, e
+            printf "%.9f %.9f %s %s\n", s, e, label(start, s), label(end, e)
         }
     '); then
         return 1
     fi
-    read -r START_SECONDS END_SECONDS <<< "$TIME_SECONDS"
+    read -r START_SECONDS END_SECONDS START_CLEAN END_CLEAN <<< "$TIME_SECONDS"
 
-    local DIR NAME START_CLEAN END_CLEAN OUTPUT VENC CRF rc RATE_LABEL
+    local DIR NAME OUTPUT VENC CRF rc RATE_LABEL
     DIR=$(dirname "$INPUT_FILE")
     NAME=$(basename "$INPUT_FILE" | sed 's/\.[^.]*$//')
-    START_CLEAN=$(echo "$START_TIME" | tr -d ':')
-    END_CLEAN=$(echo "$END_TIME" | tr -d ':')
 
     # 文件名附带目标码率(若有)，避免同一区段不同码率互相覆盖
     RATE_LABEL=""

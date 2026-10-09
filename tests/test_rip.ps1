@@ -23,11 +23,13 @@ try {
             if (-not $rejected) { throw "Invalid range accepted: $script $pair" }
             if (Get-ChildItem '*_cut_*') { throw 'Invalid input generated an output' }
         }
-        foreach ($pair in @(@('0', '2'), @('00:00.5', '00:01.5'), @('00:00:00.5', '00:00:01.5'), @('start', 'end'))) {
+        foreach ($pair in @(@('0', '2'), @('0.50', '1.500'), @('00:00.5', '00:01.5'), @('00:00:00.5', '00:00:01.5'), @('start', 'end'))) {
             rip 'sample video.mp4' $pair[0] $pair[1]
             if ($LASTEXITCODE -ne 0) { throw "Valid range failed: $script $pair" }
             $output = Get-ChildItem '*_cut_*'
             if ($output.Count -ne 1) { throw 'Expected exactly one output' }
+            $label = if ($pair[0] -eq 'start') { 'start-end' } elseif ($pair[0] -eq '0') { '000000-000002' } else { '000000.5-000001.5' }
+            if ($output.Name -ne "sample video_cut_$label.mp4") { throw "Wrong output filename: $($output.Name)" }
             $durationText = & ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 $output.FullName
             $duration = [double]::Parse($durationText, [cultureinfo]::InvariantCulture)
             $expected = if ($pair[0] -in @('0', 'start')) { 2 } else { 1 }
@@ -41,7 +43,7 @@ try {
             rip $source 0 1
             if ($LASTEXITCODE -ne 0) { throw "Non-MP4 input failed: $script $extension" }
             $output = Get-ChildItem '*_cut_*'
-            if ($output.Count -ne 1 -or $output.Name -ne 'sample video_cut_0-1.mp4') { throw 'Expected exactly one MP4 output' }
+            if ($output.Count -ne 1 -or $output.Name -ne 'sample video_cut_000000-000001.mp4') { throw 'Expected exactly one MP4 output' }
             $formatName = & ffprobe -v error -show_entries format=format_name -of default=noprint_wrappers=1:nokey=1 $output.FullName
             if ($LASTEXITCODE -ne 0 -or 'mp4' -notin $formatName.Split(',')) { throw 'Output is not an MP4 container' }
             Remove-Item -LiteralPath $output.FullName

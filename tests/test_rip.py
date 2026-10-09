@@ -40,16 +40,35 @@ class RipTimeValidation(unittest.TestCase):
                 self.assertEqual(list(self.directory.glob('*_cut_*')), [])
 
     def test_valid_formats_and_end_at_duration(self):
-        for start, end in [('0', '2'), ('00:00.5', '00:01.5'), ('00:00:00.5', '00:00:01.5')]:
+        for start, end in [('0', '2'), ('0.50', '1.500'), ('00:00.5', '00:01.5'), ('00:00:00.5', '00:00:01.5')]:
             with self.subTest(start=start, end=end):
                 result = self.rip(start, end)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                output = self.directory / f'sample video_cut_{start.replace(":", "")}-{end.replace(":", "")}.mp4'
+                name = '000000-000002' if start == '0' else '000000.5-000001.5'
+                output = self.directory / f'sample video_cut_{name}.mp4'
                 duration = subprocess.check_output([
                     'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
                     '-of', 'default=noprint_wrappers=1:nokey=1', str(output),
                 ], text=True)
                 self.assertAlmostEqual(float(duration), 2 if start == '0' else 1, places=2)
+
+    def test_filename_normalizes_minutes_hours_and_bitrate(self):
+        for start, end, label in [
+            ('90', '225', '000130-000345'),
+            ('59.50', '3600.25', '000059.5-010000.25'),
+            ('90:00', '100:00:00', '013000-1000000'),
+        ]:
+            with self.subTest(start=start, end=end):
+                result = subprocess.run([
+                    'bash', '-c',
+                    'source "$1"; ffprobe() { echo 400000; }; '
+                    'ffmpeg() { touch "${@: -1}"; }; rip "$2" "$3" "$4" 2M',
+                    'test', str(SCRIPT), str(self.source), start, end,
+                ], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                output = self.directory / f'sample video_cut_{label}_2M.mp4'
+                self.assertTrue(output.is_file(), result.stdout)
+                output.unlink()
 
     def test_non_mp4_inputs_produce_mp4(self):
         for extension in ('mkv', 'mov'):
@@ -61,7 +80,7 @@ class RipTimeValidation(unittest.TestCase):
                 ], check=True)
                 result = self.rip('0', '1', source=source)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                output = self.directory / 'sample video_cut_0-1.mp4'
+                output = self.directory / 'sample video_cut_000000-000001.mp4'
                 self.assertEqual(list(self.directory.glob('*_cut_*')), [output])
                 format_name = subprocess.check_output([
                     'ffprobe', '-v', 'error', '-show_entries', 'format=format_name',
