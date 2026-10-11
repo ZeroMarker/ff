@@ -6,10 +6,14 @@
 #   Bash 4+（使用 mapfile 和数组）；交互选择需要 fzf；读取 ncdu 库还需要 jq。
 #   ncr 调用外部定义的 rip 函数/命令，需要另行加载或安装。
 #
-# 两层接口：
+# 三层接口：
 #   通用层接收 stdin 中「一行一项」的候选列表，不解析 ncdu/JSON：
 #     pick                        输出选中项，TAB 多选，ENTER 确认
 #     f <命令> [参数…]            选中后执行命令，用独立参数 '{}' 填入选中项
+#   fd 缓存层扫描 ~/pik，首次自动生成缓存，之后手动刷新：
+#     pik_refresh                 刷新文件列表缓存（需要 fd 或 fdfind）
+#     pik                         选择并输出缓存中的文件路径
+#     pikf <命令> [参数…]         从缓存选文件并执行命令
 #   ncdu 层读取 ncdu -o 导出的 JSON，再交给通用层：
 #     _ncdu_paths [库]             输出非目录条目的路径
 #     _ncdu_dirs [库]              输出目录路径，包含扫描根目录
@@ -157,6 +161,47 @@ f() {
     done
 
     return "$rc"
+}
+
+# ── fd 缓存：~/pik ────────────────────────────────────────
+# 首次使用生成缓存，之后手动 pik_refresh；不支持文件名中的换行。
+# 包含隐藏和忽略文件，不跟随目录符号链接。PIK_CACHE 可覆盖缓存位置。
+_pik_cache_path() {
+    printf '%s\n' "${PIK_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/ff/pik.files}"
+}
+
+pik_refresh() (
+    local cache tmp scanner
+    cache="$(_pik_cache_path)"
+    [[ -d "$HOME/pik" ]] || { echo "目录不存在: $HOME/pik" >&2; return 1; }
+    if command -v fd >/dev/null 2>&1; then
+        scanner=fd
+    elif command -v fdfind >/dev/null 2>&1; then
+        scanner=fdfind
+    else
+        echo "需要安装 fd（或 fdfind）" >&2
+        return 127
+    fi
+    mkdir -p -- "$(dirname -- "$cache")" || return
+    tmp="$(mktemp "${cache}.tmp.XXXXXX")" || return
+    trap 'rm -f -- "$tmp"' EXIT
+    "$scanner" --type f --hidden --no-ignore --absolute-path --color never -- '' "$HOME/pik" > "$tmp" || return
+    mv -f -- "$tmp" "$cache"
+)
+
+_pik_ensure_cache() {
+    [[ -f "$(_pik_cache_path)" ]] || pik_refresh
+}
+
+pik() {
+    _pik_ensure_cache || return
+    PICK_PROMPT='pik> ' pick < "$(_pik_cache_path)"
+}
+
+pikf() {
+    [[ $# -gt 0 ]] || { echo "用法: pikf <命令> [参数…]（{} 为选中路径占位符）" >&2; return 1; }
+    _pik_ensure_cache || return
+    PICK_PROMPT='pik> ' f "$@" < "$(_pik_cache_path)"
 }
 
 # ── ncdu 层 ───────────────────────────────────────────────

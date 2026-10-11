@@ -133,12 +133,13 @@ unset shell_functions
 
 ### 与 fzf 选择器组合（`{}` 占位符）
 
-`scripts/fzf/fzf.sh` 分成互不依赖的两层，通用层不认识 ncdu、也不解析 JSON：
+`scripts/fzf/fzf.sh` 的通用层接收路径列表，ncdu 和 fd 缓存层提供候选：
 
 | 层 | 函数 | 职责 |
 |----|------|------|
 | 通用 | `pick` | stdin=候选列表（一行一项），stdout=选中项（TAB 多选、可多行）；空列表或取消时非零退出、无输出 |
 | 通用 | `f` | `<候选列表> \| f <命令> [参数…]`：把选中项填进 `{}` 后执行 |
+| fd 缓存 | `pik_refresh` / `pik` / `pikf` | 用 fd 缓存 `~/pik` 文件列表，再用 fzf 选择或执行命令 |
 | ncdu | `_ncdu_paths` / `_ncdu_dirs` | 只做 ncdu JSON → 路径列表（文件 / 目录） |
 | ncdu | `ncf` / `fn` / `fcd` / `ncr` | 薄包装：选择文件 / 绑定 `f` / 绑定 `f cd` / 绑定 `f rip` |
 
@@ -149,6 +150,14 @@ ls *.mp4                      | f rip {} 00:01:00 00:02:00   # 当前目录
 find ~/videos -name '*.mp4'   | f rip {} 00:01:00 00:02:00   # 递归找
 git ls-files '*.mp4'          | PICK_PROMPT='git> ' f git add {}   # 加入暂存
 find ~/videos -name '*.mp4'   | pick                          # 只要选中结果
+```
+
+`~/pik` 文件列表默认缓存到 `${XDG_CACHE_HOME:-$HOME/.cache}/ff/pik.files`，可用 `PIK_CACHE` 覆盖。首次使用自动扫描，后续直接读取缓存；文件增删后执行 `pik_refresh`。缓存包含隐藏和忽略文件，使用绝对路径，不跟随目录符号链接；扫描失败保留旧缓存。需要 fd（也兼容 Debian 的 fdfind），路径不能含换行。
+
+```bash
+pik_refresh                      # 生成或刷新缓存
+pik                              # TAB 多选，输出文件路径
+pikf rip '{}' 00:01:00 00:02:00    # 选择后执行命令
 ```
 
 ncdu 层（`_ncdu_paths` 提供候选，等于给上面的管道换个来源）。`fn` 是「把 ncdu 库绑好」的 `f`，用法与 `f` 完全一致，只是候选来自库、少写一条管道：
