@@ -82,8 +82,8 @@ h2v() {
         echo "处理: $name (偏移: $offset)"
         echo "输出: $out"
         ffmpeg -y -i "$f" \
-            -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:(in_w-1080)*${offset}:(in_h-1920)/2" \
-            -c:a copy "$out"
+            -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:(in_w-1080)*${offset}:(in_h-1920)/2,setsar=1" \
+            -pix_fmt yuv420p -c:a copy -movflags +faststart "$out"
         if [ "$?" -ne 0 ]; then
             rc=1
         fi

@@ -58,8 +58,8 @@ function vert {
     echo "输出: $OUTPUT_FILE"
 
     ffmpeg -y -i "$INPUT_FILE" \
-        -vf "transpose=${TRANSPOSE}" \
-        -c:v libx264 -crf 18 -preset medium -c:a aac \
+        -vf "transpose=${TRANSPOSE},setsar=1" \
+        -c:v libx264 -crf 18 -preset medium -pix_fmt yuv420p -c:a aac -movflags +faststart \
         "$OUTPUT_FILE"
     local rc=$?
 
