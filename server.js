@@ -66,7 +66,16 @@ const FS_ROOTS = (() => {
 /* 禁止访问的系统敏感路径前缀 */
 const FS_DENY_PREFIX = ['/proc', '/sys', '/dev', '/run', '/etc', '/boot', '/var/lib', '/root', '/snap', '/var/cache', '/var/log' ];
 /* 禁止访问的目录名（任意层级） */
-const FS_DENY_NAMES = ['.ssh', '.gnupg', '.aws', '.config', 'node_modules', '.git', '.cache', 'keystore', 'secrets'];
+const FS_DENY_NAMES = ['.ssh', '.gnupg', '.aws', '.config', 'node_modules', '.git', '.cache', '.claude', 'keystore', 'secrets'];
+
+/* 可读取/下载/删除的文件类型：仅媒体文件，避免经文件浏览接口泄露 .env 等任意文件 */
+const MEDIA_FILE_EXT = /\.(mp4|webm|mov|mkv|avi|m4v|flv|ts|mpeg|mpg|wmv|mp3|m4a|aac|ogg|flac|wav|gif|png|jpe?g|webp)$/i;
+function fsResolveMedia(p) {
+  const real = fsResolve(p);
+  if (!MEDIA_FILE_EXT.test(real)) throw new Error('仅允许访问媒体文件');
+  if (!fs.statSync(real).isFile()) throw new Error('不是文件');
+  return real;
+}
 
 function fsResolve(p) {
   if (typeof p !== 'string' || !p.trim()) throw new Error('缺少路径参数');
@@ -132,25 +141,9 @@ function saveJobs() {
   try { fs.writeFileSync(JOBS_FILE, JSON.stringify([...jobs.values()], null, 2)); } catch (e) { console.error('jobs 状态保存失败:', e.message); }
 }
 
-class Queue {
-  constructor(limit) { this.limit = limit; this.running = 0; this.waiting = []; }
-  push(fn) {
-    return new Promise((resolve, reject) => {
-      this.waiting.push({ fn, resolve, reject });
-      this.pump();
-    });
-  }
-  pump() {
-    if (this.running >= this.limit || !this.waiting.length) return;
-    this.running++;
-    const { fn, resolve, reject } = this.waiting.shift();
-    Promise.resolve().then(fn).then(
-      (v) => { this.running--; this.pump(); resolve(v); },
-      (e) => { this.running--; this.pump(); reject(e); },
-    );
-  }
-}
+const Queue = require('./lib/queue');
 const queue = new Queue(MAX_CONCURRENCY);
+const getThumbnail = require('./lib/thumbnails')({ directory: THUMBS_DIR, queue, ff });
 
 function makeJob(meta) {
   const id = crypto.randomUUID();
@@ -518,42 +511,34 @@ app.post('/api/upload', (req, res) => {
 
 /* 流式播放(支持 Range/seek) */
 app.get('/api/videos/:name', (req, res) => {
-  const fp = path.join(VIDEOS_DIR, decodeURIComponent(req.params.name));
-  if (!fs.existsSync(fp)) return res.status(404).json({ error: 'file not found' });
+  let fp;
+  try { fp = localVideoPath(req.params.name); } catch { return res.status(404).json({ error: 'file not found' }); }
   res.sendFile(fp);
 });
 
 /* 元数据 */
 app.get('/api/videos/:name/info', (req, res) => {
   try {
-    res.json(ff.probe(path.join(VIDEOS_DIR, decodeURIComponent(req.params.name))));
+    res.json(ff.probe(localVideoPath(req.params.name)));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 /* 缩略图（按 mtime 缓存） */
-app.get('/api/videos/:name/thumbnail', (req, res) => {
-  const name = decodeURIComponent(req.params.name);
-  const fp = path.join(VIDEOS_DIR, name);
-  if (!fs.existsSync(fp)) return res.status(404).json({ error: 'file not found' });
+app.get('/api/videos/:name/thumbnail', async (req, res) => {
+  const name = req.params.name;
+  let fp;
+  try { fp = localVideoPath(name); } catch { return res.status(404).json({ error: 'file not found' }); }
 
-  const st = fs.statSync(fp);
-  const cache = path.join(THUMBS_DIR, ff.md5(name + st.mtimeMs) + '.jpg');
-  if (!fs.existsSync(cache)) {
-    try {
-      fs.mkdirSync(THUMBS_DIR, { recursive: true });
-      const meta = ff.probe(fp);
-      const at = Math.min(1, Math.max(0, (meta.format.duration || 2) * 0.3));
-      ff.runFFmpegSync(ff.buildThumbArgs(fp, cache, { at }).args, 240000);
-    } catch (e) {
-      return res.status(500).json({ error: '无法生成缩略图: ' + e.message });
-    }
+  try {
+    res.sendFile(await getThumbnail(fp));
+  } catch (e) {
+    res.status(500).json({ error: '无法生成缩略图: ' + e.message });
   }
-  res.sendFile(cache);
 });
 
 app.delete('/api/videos/:name', (req, res) => {
-  const fp = path.join(VIDEOS_DIR, decodeURIComponent(req.params.name));
-  if (!fs.existsSync(fp)) return res.status(404).json({ error: 'file not found' });
+  let fp;
+  try { fp = localVideoPath(req.params.name); } catch { return res.status(404).json({ error: 'file not found' }); }
   fs.unlinkSync(fp);
   res.json({ ok: true });
 });
@@ -570,29 +555,19 @@ app.get('/api/fs/roots', (req, res) => {
 
 app.get('/api/fs/video', (req, res) => {
   try {
-    const fp = fsResolve(req.query.path);
-    if (!fs.statSync(fp).isFile()) return res.status(400).json({ error: '不是文件' });
-    res.sendFile(fp);
+    res.sendFile(fsResolveMedia(req.query.path));
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 app.get('/api/fs/info', (req, res) => {
-  try { res.json(ff.probe(fsResolve(req.query.path))); }
+  try { res.json(ff.probe(fsResolveMedia(req.query.path))); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/api/fs/thumbnail', (req, res) => {
+app.get('/api/fs/thumbnail', async (req, res) => {
   try {
-    const fp = fsResolve(req.query.path);
-    const st = fs.statSync(fp);
-    const cache = path.join(THUMBS_DIR, ff.md5(fp + ':' + st.size + ':' + st.mtimeMs) + '.jpg');
-    if (!fs.existsSync(cache)) {
-      fs.mkdirSync(THUMBS_DIR, { recursive: true });
-      const meta = ff.probe(fp);
-      const at = Math.min(1, Math.max(0, (meta.format.duration || 2) * 0.3));
-      ff.runFFmpegSync(ff.buildThumbArgs(fp, cache, { at }).args, 240000);
-    }
-    res.sendFile(cache);
+    const fp = fsResolveMedia(req.query.path);
+    res.sendFile(await getThumbnail(fp));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -699,16 +674,14 @@ app.get('/api/outputs', (req, res) => {
 
 app.get('/api/output-file', (req, res) => {
   try {
-    const filePath = fsResolve(req.query.path);
-    if (!fs.statSync(filePath).isFile()) return res.status(404).json({ error: 'file not found' });
+    const filePath = fsResolveMedia(req.query.path);
     res.download(filePath, path.basename(filePath));
   } catch (e) { res.status(404).json({ error: e.message }); }
 });
 
 app.delete('/api/output-file', (req, res) => {
   try {
-    const filePath = fsResolve(req.query.path);
-    if (!fs.statSync(filePath).isFile()) return res.status(404).json({ error: 'file not found' });
+    const filePath = fsResolveMedia(req.query.path);
     fs.unlinkSync(filePath);
     res.json({ ok: true });
   } catch (e) { res.status(404).json({ error: e.message }); }
