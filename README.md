@@ -92,7 +92,7 @@ sudo systemctl restart ff-web-editor
 | `rip`（精准剪辑） | `scripts/ffmpeg/linux/cut.sh`（bash 函数） | libx264 重编码，帧级精确裁剪 |
 | `h2v`（横屏转竖屏） | `scripts/ffmpeg/linux/h2v.sh`（bash 函数） | `h2v [偏移量] [文件…]`：`scale+crop`，偏移量 0.0~1.0（默认 0.5）；无文件时扫当前目录 `*.mp4` 输出到 `vertical/*_h2v.mp4`，指定文件时输出到源文件同目录 |
 | `sub`（添加字幕） | `scripts/ffmpeg/linux/subtitle.sh`（bash 函数） | `sub <视频> <字幕> [输出.mp4] [burn\|embed] [crf]`：前两个参数**顺序可颠倒**（按扩展名/ffprobe 自动识别）；第 3 个起按内容识别（`burn\|embed`=模式、纯整数=crf、其它=输出名）；burn 烧录进画面（默认，重编码），embed 封装为可开关字幕轨（流复制）；`crf` 默认 18，仅 burn 生效，越小越清晰/越大 |
-| `audio`（提取音频） | `scripts/ffmpeg/linux/audio.sh`（bash 函数） | `audio <视频> [输出音频] [--format 格式] [--start 秒] [--end 秒]`：支持 MP3/M4A/AAC/OGG/FLAC/WAV，默认原视频同目录 `<原名>_audio.mp3`，不覆盖已有文件 |
+| `audio`（提取音频） | `scripts/ffmpeg/linux/audio.sh`（bash 函数） | `audio <视频> [输出音频] [--format 格式] [--start 秒] [--end 秒]`：支持 MP3/M4A/AAC/OGG/FLAC/WAV，默认原视频同目录 `<原名>_audio.mp3`，自动覆盖同名音频输出 |
 | `vert`（旋转竖屏） | `scripts/ffmpeg/linux/vert.sh`（bash 函数） | 顺/逆时针旋转，不缩放、不裁剪 |
 | `pick` / `f`（通用选择器） | `scripts/fzf/fzf.sh`（bash 函数） | 候选源任意（`ls` / `find` / `git ls-files` / ncdu…）：`<候选列表> \| pick` 交互选择，`<候选列表> \| f <命令> [参数…]` 选中后执行，`{}` 替换为选中项；TAB 可多选、逐条执行；取消时不执行 |
 | `_ncdu_paths` / `_ncdu_dirs` / `ncf` / `fn` / `fcd` / `ncr` | `scripts/fzf/fzf.sh`（bash 函数） | ncdu 层（只做 JSON→路径列表）：`_ncdu_paths [库]` 列文件，`_ncdu_dirs [库]` 列目录，`ncf [库]` 选择，`fn [库] <命令> [参数…]` = ncdu 绑定的 `f`，`fcd [库]` = 选目录并 `cd`，`ncr [库] <起> <止> [码率]` = `fn rip {} …` |

@@ -31,17 +31,19 @@ class AudioCommand(unittest.TestCase):
             '-of', 'json', str(output),
         ], text=True))
 
-    def test_default_output_and_no_overwrite(self):
+    def test_default_output_overwrites_existing_audio(self):
         result = self.audio(self.source.name)
         self.assertEqual(result.returncode, 0, result.stderr)
         output = self.directory / '-sample: video_audio.mp3'
         meta = self.probe(output)
         self.assertEqual([s['codec_type'] for s in meta['streams']], ['audio'])
         self.assertEqual(meta['streams'][0]['codec_name'], 'mp3')
-        original = output.read_bytes()
+        original_source = self.source.read_bytes()
+        output.write_bytes(b'old audio to replace')
         result = self.audio(str(self.source))
-        self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(output.read_bytes(), original)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.probe(output)['streams'][0]['codec_name'], 'mp3')
+        self.assertEqual(self.source.read_bytes(), original_source)
 
     def test_all_formats_and_time_range(self):
         for extension, codec in [('mp3', 'mp3'), ('m4a', 'aac'), ('aac', 'aac'),

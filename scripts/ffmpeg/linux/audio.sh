@@ -4,7 +4,7 @@
 audio() {
     if [[ ${1:-} == --help || ${1:-} == -h || $# == 0 ]]; then
         echo '用法: audio <视频> [输出音频] [--format mp3|m4a|aac|ogg|flac|wav] [--start 秒] [--end 秒]'
-        echo '默认输出到原视频同目录的 <原名>_audio.mp3；不覆盖已有文件。'
+        echo '默认输出到原视频同目录的 <原名>_audio.mp3；自动覆盖同名音频输出。'
         [[ $# -gt 0 ]]
         return $?
     fi
@@ -86,16 +86,12 @@ audio() {
         echo "错误: 输出文件扩展名必须为 .$format" >&2
         return 1
     fi
-    if [[ -e $output || -L $output ]]; then
-        echo "错误: 输出文件已存在: $output" >&2
-        return 1
-    fi
     local executable="${FFMPEG_PATH:-ffmpeg}"
     if ! command -v "$executable" >/dev/null 2>&1; then
         echo '错误: ffmpeg 未安装或不在 PATH 中' >&2
         return 1
     fi
-    local -a args=(-hide_banner -nostdin -n -ss "$start" -i "$input")
+    local -a args=(-hide_banner -nostdin -y -ss "$start" -i "$input")
     [[ -n $duration ]] && args+=(-t "$duration")
     args+=(-map 0:a:0 -vn -c:a "$codec")
     [[ -n $bitrate ]] && args+=(-b:a "$bitrate")
